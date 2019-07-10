@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -euo pipefail
+
+GIT_ROOT=${GIT_ROOT:-$(git rev-parse --show-toplevel)}
+. "${GIT_ROOT}/bin/include/versioning"
+
+BASEDIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -v
+CGO_ENABLED=0 go build -o "${BASEDIR}/binaries/eirini-loggregator-bridge" -ldflags="-X github.com/SUSE/eirini-loggregator-bridge/version.Version=${ARTIFACT_VERSION}"
