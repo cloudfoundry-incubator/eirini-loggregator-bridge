@@ -16,13 +16,20 @@ import (
 var cfgFile string
 
 var config configpkg.ConfigType
-var kubeClient kubernetes.Clientset
+var kubeClient *kubernetes.Clientset
 
 var rootCmd = &cobra.Command{
 	Use:   "eirini-loggregator-bridge",
 	Short: "eirini-loggregator-bridge streams Eirini application logs to CloudFoundry loggregator",
 	Run: func(cmd *cobra.Command, args []string) {
-		kubeClient, err := GetKubeClient()
+		var err error
+		err = config.Validate()
+		if err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
+
+		kubeClient, err = GetKubeClient()
 		if err != nil {
 			LogError(err.Error())
 			os.Exit(1)
