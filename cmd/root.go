@@ -4,6 +4,7 @@ import (
 	"os"
 
 	configpkg "github.com/SUSE/eirini-loggregator-bridge/config"
+	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	podwatcher "github.com/SUSE/eirini-loggregator-bridge/podwatcher"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"

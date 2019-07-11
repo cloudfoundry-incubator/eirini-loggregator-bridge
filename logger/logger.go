@@ -1,7 +1,8 @@
-package cmd
+package logger
 
 import (
 	"fmt"
+	"os"
 )
 
 var LogLevels = map[string]int{
@@ -11,7 +12,7 @@ var LogLevels = map[string]int{
 	"ERROR": 4,
 }
 
-var LogLevel = LogLevels["WARN"]
+var LogLevel = os.Getenv("EIRINI_LOGGREGATOR_BRIDGE_LOGLEVEL")
 
 func LogWarn(args ...interface{}) {
 	log(LogLevels["WARN"], args...)
@@ -29,7 +30,15 @@ func LogDebug(args ...interface{}) {
 // Wrapper method that should be used to print output. Using this instead of fmt
 // let's you implement verbosity levels or disable output completely.
 func log(targetLogLevel int, args ...interface{}) {
-	if targetLogLevel >= LogLevel {
+	var logLevel int
+
+	if LogLevel == "" {
+		logLevel = LogLevels["WARN"]
+	} else {
+		logLevel = LogLevels[LogLevel]
+	}
+
+	if targetLogLevel >= logLevel {
 		fmt.Println(args...)
 	}
 }
