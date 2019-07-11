@@ -3,19 +3,31 @@ package cmd
 import (
 	"os"
 
-	config "github.com/SUSE/eirini-loggregator-bridge/config"
+	configpkg "github.com/SUSE/eirini-loggregator-bridge/config"
+	podwatcher "github.com/SUSE/eirini-loggregator-bridge/podwatcher"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"k8s.io/client-go/kubernetes"
+	clientcmd "k8s.io/client-go/tools/clientcmd"
 )
 
 var cfgFile string
 
-var Config config.ConfigType
+var config configpkg.ConfigType
+var kubeClient kubernetes.Clientset
 
 var rootCmd = &cobra.Command{
 	Use:   "eirini-loggregator-bridge",
 	Short: "eirini-loggregator-bridge streams Eirini application logs to CloudFoundry loggregator",
 	Run: func(cmd *cobra.Command, args []string) {
+		kubeClient, err := GetKubeClient()
+		if err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
+
+		podwatcher.NewPodWatcher(config, kubeClient).Run()
 	},
 }
 
@@ -47,5 +59,22 @@ func initConfig() {
 		LogError("Can't read config:", err.Error())
 		os.Exit(1)
 	}
-	viper.Unmarshal(&Config)
+	viper.Unmarshal(&config)
+}
+
+// Returns a kube client to be used to talk to the kube API
+// For now only works in cluster.
+func GetKubeClient() (*kubernetes.Clientset, error) {
+	// InClusterConfig when flags are empty
+	c, err := clientcmd.BuildConfigFromFlags("", "")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get inClusterConfig")
+	}
+
+	clientset, err := kubernetes.NewForConfig(c)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create clientset")
+	}
+
+	return clientset, nil
 }

@@ -6,6 +6,9 @@ build:
 
 test: test-unit
 
+gen-fakes:
+	bin/gen-fakes
+
 vet:
 	bin/vet
 
