@@ -20,8 +20,8 @@ require (
 	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
 	golang.org/x/tools v0.0.0-20190709211700-7b25e351ac0e // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/api v0.0.0-20180708011939-8be2a0b24ed0 // indirect
-	k8s.io/apimachinery v0.0.0-20180719193910-594fc14b6f14 // indirect
+	k8s.io/api v0.0.0-20180708011939-8be2a0b24ed0
+	k8s.io/apimachinery v0.0.0-20180719193910-594fc14b6f14
 	k8s.io/client-go v0.0.0-20180719235251-739dd8f9d480
 	k8s.io/klog v0.3.3 // indirect
 	k8s.io/utils v0.0.0-20190607212802-c55fbcfc754a // indirect
