@@ -1,10 +1,10 @@
-all: test build
+all: vet lint test build
 
 .PHONY: build
 build:
 	bin/build
 
-test: vet lint test-unit
+test: test-unit
 
 vet:
 	bin/vet
