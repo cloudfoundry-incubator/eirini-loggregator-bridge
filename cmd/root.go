@@ -3,21 +3,14 @@ package cmd
 import (
 	"os"
 
+	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var cfgFile string
 
-type ConfigType struct {
-	Namespace           string `mapstructure:"namespace"`
-	LoggregatorEndpoint string `mapstructure:"loggregator-endpoint"`
-	LoggregatorCAPath   string `mapstructure:"loggregator-ca-path"`
-	LoggregatorCertPath string `mapstructure:"loggregator-cert-path"`
-	LoggregatorKeyPath  string `mapstructure:"loggregator-key-path"`
-}
-
-var Config ConfigType
+var Config config.ConfigType
 
 var rootCmd = &cobra.Command{
 	Use:   "eirini-loggregator-bridge",
