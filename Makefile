@@ -14,3 +14,7 @@ lint:
 
 test-unit:
 	bin/test-unit
+
+.PHONY: tools
+tools:
+	bin/tools
