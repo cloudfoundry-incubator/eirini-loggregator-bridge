@@ -42,7 +42,6 @@ func init() {
 }
 
 func initConfig() {
-	// Don't forget to read config either from cfgFile or from home directory!
 	if cfgFile != "" {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
