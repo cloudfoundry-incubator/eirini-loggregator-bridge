@@ -36,7 +36,11 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		podwatcher.NewPodWatcher(config, kubeClient).Run()
+		err = podwatcher.NewPodWatcher(config, kubeClient).Run()
+		if err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
 	},
 }
 
