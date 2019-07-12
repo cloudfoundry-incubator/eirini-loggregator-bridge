@@ -17,20 +17,26 @@ type PodWatcher struct {
 	containers []Container
 }
 
-type ContainerList map[string]Container
+type ContainerList map[string]*Container
 
-func (cl *ContainerList) GetContainer(name string) (Container, bool) {
-	c, ok := (*cl)[name]
+func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
+	c, ok := (*cl)[uid]
 	return c, ok
 }
 
-//TODO:
-// AddContainer adds a container to the list if doesn't exist,
-// or kills the previously one by using the killChannel and adds the new one to the list
-func (cl ContainerList) AddContainer(c Container) error {
-	// TODO: Fix this
-	LogDebug("Adding container ", c)
+func (cl *ContainerList) AddContainer(c *Container) {
+	(*cl)[c.UID] = c
+}
 
+// EnsureContainer make sure the container exists in the list
+// and we are monitoring it.
+func (cl ContainerList) EnsureContainer(c *Container) error {
+	// TODO: implement this
+	LogDebug(c.UID + ": ensuring container is monitored")
+
+	if _, ok := cl.GetContainer(c.UID); !ok {
+		cl.AddContainer(c)
+	}
 	return nil
 }
 
@@ -60,14 +66,19 @@ func findContainerState(name string, containerStatuses []corev1.ContainerStatus)
 // the relevant gorouting (if it is still running, it could already be stopped
 // because of an error).
 func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
-	//LogDebug(pod.Status.ContainerStatuses)
-	//LogDebug(pod.Status.InitContainerStatuses)
 	for _, c := range pod.Spec.InitContainers {
 		cUID := generateContainerUID(pod, c)
 		cState := findContainerState(c.Name, pod.Status.InitContainerStatuses)
 		//		LogDebug("status:", pod.Status.InitContainerStatuses[k].State)
 		if cState != nil && cState.Running != nil {
-			LogDebug(cUID + " init container is running - ensure  we are streaming")
+			cl.EnsureContainer(&Container{Name: c.Name,
+				PodName:       pod.Name,
+				PodUID:        string(pod.UID),
+				UID:           cUID,
+				Namespace:     pod.Namespace,
+				killChannel:   make(chan bool),
+				InitContainer: true,
+			})
 		} else {
 			LogDebug(cUID + " init container is not running, ensure we are NOT streaming")
 		}
@@ -77,7 +88,14 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 		cUID := generateContainerUID(pod, c)
 		cState := findContainerState(c.Name, pod.Status.ContainerStatuses)
 		if cState != nil && cState.Running != nil {
-			LogDebug(cUID + " container is running - ensure  we are streaming")
+			cl.EnsureContainer(&Container{Name: c.Name,
+				PodName:       pod.Name,
+				PodUID:        string(pod.UID),
+				UID:           cUID,
+				Namespace:     pod.Namespace,
+				killChannel:   make(chan bool),
+				InitContainer: false,
+			})
 		} else {
 			LogDebug(cUID + " container is not running, ensure we are NOT streaming")
 		}
@@ -87,11 +105,13 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 }
 
 type Container struct {
-	killChannel chan bool
-	PodName     string
-	Namespace   string
-	Name        string
-	PodUID      string
+	killChannel   chan bool
+	PodName       string
+	Namespace     string
+	Name          string
+	PodUID        string
+	UID           string
+	InitContainer bool
 }
 
 func NewPodWatcher(config config.ConfigType, kubeClient kubernetes.Interface) *PodWatcher {
