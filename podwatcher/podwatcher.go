@@ -1,6 +1,7 @@
 package podwatcher
 
 import (
+	"fmt"
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	"github.com/pkg/errors"
@@ -17,6 +18,11 @@ type PodWatcher struct {
 }
 
 type ContainerList map[string]Container
+
+func (cl *ContainerList) GetContainer(name string) (Container, bool) {
+	c, ok := (*cl)[name]
+	return c, ok
+}
 
 //TODO:
 // AddContainer adds a container to the list if doesn't exist,
@@ -35,12 +41,57 @@ func (cl ContainerList) RemovePODContainers(podUID string) error {
 	return nil
 }
 
+func generateContainerUID(pod *corev1.Pod, container corev1.Container) string {
+	return fmt.Sprintf("%s-%s", string(pod.UID), container.Name)
+}
+
+func findContainerState(name string, containerStatuses []corev1.ContainerStatus) *corev1.ContainerState {
+	for _, status := range containerStatuses {
+		if status.Name == name {
+			return &status.State
+		}
+	}
+	return nil
+}
+
+// EnsurePodStatus handles a pod event by adding or removing container tailing
+// goroutines. Every running container in the monitored namespace has its own
+// goroutine that reads its log stream. When a container is stopped we stop
+// the relevant gorouting (if it is still running, it could already be stopped
+// because of an error).
+func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
+	//LogDebug(pod.Status.ContainerStatuses)
+	//LogDebug(pod.Status.InitContainerStatuses)
+	for _, c := range pod.Spec.InitContainers {
+		cUID := generateContainerUID(pod, c)
+		cState := findContainerState(c.Name, pod.Status.InitContainerStatuses)
+		//		LogDebug("status:", pod.Status.InitContainerStatuses[k].State)
+		if cState != nil && cState.Running != nil {
+			LogDebug(cUID + " init container is running - ensure  we are streaming")
+		} else {
+			LogDebug(cUID + " init container is not running, ensure we are NOT streaming")
+		}
+
+	}
+	for _, c := range pod.Spec.Containers {
+		cUID := generateContainerUID(pod, c)
+		cState := findContainerState(c.Name, pod.Status.ContainerStatuses)
+		if cState != nil && cState.Running != nil {
+			LogDebug(cUID + " container is running - ensure  we are streaming")
+		} else {
+			LogDebug(cUID + " container is not running, ensure we are NOT streaming")
+		}
+
+	}
+	return nil
+}
+
 type Container struct {
-	killChannel   chan bool
-	PodName       string
-	Namespace     string
-	ContainerName string
-	PodUID        string
+	killChannel chan bool
+	PodName     string
+	Namespace   string
+	Name        string
+	PodUID      string
 }
 
 func NewPodWatcher(config config.ConfigType, kubeClient kubernetes.Interface) *PodWatcher {
@@ -64,11 +115,8 @@ func (pw *PodWatcher) Run() error {
 		return errors.Wrap(err, "failed to set up watch")
 	}
 
-	//added := make(chan *Container)
-	//removed := make(chan *Container)
-
-	// Keep reading the result channel for new events
-	for {
+	containers := ContainerList{}
+	for { // Keep reading the result channel for new events
 		select {
 		case e := <-watcher.ResultChan():
 			if e.Object == nil {
@@ -85,38 +133,17 @@ func (pw *PodWatcher) Run() error {
 				continue
 			}
 
-			containers := ContainerList{}
-
-			switch e.Type {
-			case watch.Added, watch.Modified:
-				LogDebug("POD received from the watcher", pod)
-
-				// We need also to loop over InitContainers (staging?)
-				for _, c := range pod.Spec.Containers {
-					containers.AddContainer(Container{
-						Namespace:     pod.Namespace,
-						PodName:       pod.Name,
-						ContainerName: c.Name,
-						PodUID:        string(pod.UID),
-						killChannel:   make(chan bool),
-					})
-				}
-			case watch.Deleted:
-				containers.RemovePODContainers(string(pod.UID))
-			default:
-				LogDebug("Unprocessable watch event", e.Type)
-			}
+			containers.EnsurePodStatus(pod)
 		}
 	}
 
 	return nil
 
-	// Consume a kubeclient ✓
-	// Create kube watcher
-
-	// (save it somewhere?)
-	// select on channels and handle events and spin up go routines for the new pod
-	// Or stop goroutine for removed pods
-	// Those goroutines read the logs  of the pod from the kube api and simply  writes metadata to a channel.
-	// Then we have one or more reader instances that consumes the channel, converting metadata to loggregator envelopes and streams that to loggregator
+	// TODO:
+	// - Consume a kubeclient ✓
+	// - Create kube watcher ✓
+	// - Select on channels and handle events and spin up go routines for the new pod
+	//   Or stop goroutine for removed pods
+	//   Those goroutines read the logs  of the pod from the kube api and simply  writes metadata to a channel.
+	// - Then we have one or more reader instances that consumes the channel, converting metadata to loggregator envelopes and streams that to loggregator
 }
