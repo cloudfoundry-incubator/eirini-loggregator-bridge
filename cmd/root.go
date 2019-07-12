@@ -14,6 +14,7 @@ import (
 )
 
 var cfgFile string
+var kubeconfig string
 
 var config configpkg.ConfigType
 var kubeClient *kubernetes.Clientset
@@ -52,6 +53,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file")
+	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig file path. This is optional, in cluster config will be used if not set")
 }
 
 func initConfig() {
@@ -74,9 +76,9 @@ func initConfig() {
 // For now only works in cluster.
 func GetKubeClient() (*kubernetes.Clientset, error) {
 	// InClusterConfig when flags are empty
-	c, err := clientcmd.BuildConfigFromFlags("", "")
+	c, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get inClusterConfig")
+		return nil, errors.Wrap(err, "failed to parse kube config")
 	}
 
 	clientset, err := kubernetes.NewForConfig(c)
