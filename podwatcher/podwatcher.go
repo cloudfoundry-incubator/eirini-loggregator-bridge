@@ -2,19 +2,18 @@ package podwatcher
 
 import (
 	"fmt"
+
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
-	"github.com/pkg/errors"
+	eirinix "github.com/SUSE/eirinix"
+
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/kubernetes"
 )
 
 type PodWatcher struct {
 	Config     config.ConfigType
-	kubeClient kubernetes.Interface
-	containers []Container
+	Containers ContainerList
 }
 
 type ContainerList map[string]*Container
@@ -114,54 +113,34 @@ type Container struct {
 	InitContainer bool
 }
 
-func NewPodWatcher(config config.ConfigType, kubeClient kubernetes.Interface) *PodWatcher {
+func NewPodWatcher(config config.ConfigType) eirinix.Watcher {
 	return &PodWatcher{
-		Config:     config,
-		kubeClient: kubeClient,
+		Config: config,
 	}
 }
 
-func (pw *PodWatcher) GenWatcher(namespace string) (watch.Interface, error) {
-	podInterface := pw.kubeClient.CoreV1().Pods(namespace)
+func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
+	manager.GetLogger().Debug("Received event: ", e)
 
-	watcher, err := podInterface.Watch(
-		metav1.ListOptions{Watch: true})
-	return watcher, err
-}
-
-func (pw *PodWatcher) Run() error {
-	watcher, err := pw.GenWatcher(pw.Config.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "failed to set up watch")
+	if e.Object == nil {
+		// Closed because of error
+		// TODO: Handle errors ( maybe kill the whole application )
+		// because it is going to run in goroutines, and we can't
+		// just return gracefully and panicking the whole
+		return
 	}
 
-	containers := ContainerList{}
-	for { // Keep reading the result channel for new events
-		select {
-		case e := <-watcher.ResultChan():
-			if e.Object == nil {
-				// Closed because of error
-				// TODO: Handle errors ( maybe kill the whole application )
-				// because it is going to run in goroutines, and we can't
-				// just return gracefully and panicking the whole
-				return errors.New("no object returned from watcher")
-			}
-
-			pod, ok := e.Object.(*corev1.Pod)
-			if !ok {
-				LogDebug(errors.New("Received non-pod object in watcher channel"))
-				continue
-			}
-
-			containers.EnsurePodStatus(pod)
-		}
+	pod, ok := e.Object.(*corev1.Pod)
+	if !ok {
+		manager.GetLogger().Error("Received non-pod object in watcher channel")
+		return
 	}
 
-	return nil
+	pw.Containers.EnsurePodStatus(pod)
 
 	// TODO:
-	// - Consume a kubeclient ✓
-	// - Create kube watcher ✓
+	// - Consume a kubeclient ✓ -> moved to eirinix
+	// - Create kube watcher ✓ -> moved to eirinix
 	// - Select on channels and handle events and spin up go routines for the new pod
 	//   Or stop goroutine for removed pods
 	//   Those goroutines read the logs  of the pod from the kube api and simply  writes metadata to a channel.

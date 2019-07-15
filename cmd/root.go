@@ -3,21 +3,19 @@ package cmd
 import (
 	"os"
 
+	eirinix "github.com/SUSE/eirinix"
+
 	configpkg "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	podwatcher "github.com/SUSE/eirini-loggregator-bridge/podwatcher"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"k8s.io/client-go/kubernetes"
-	clientcmd "k8s.io/client-go/tools/clientcmd"
 )
 
 var cfgFile string
 var kubeconfig string
 
 var config configpkg.ConfigType
-var kubeClient *kubernetes.Clientset
 
 var rootCmd = &cobra.Command{
 	Use:   "eirini-loggregator-bridge",
@@ -30,17 +28,18 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		kubeClient, err = GetKubeClient()
-		if err != nil {
-			LogError(err.Error())
-			os.Exit(1)
-		}
+		filter := false
+		x := eirinix.NewManager(
+			eirinix.ManagerOptions{
+				Namespace:           config.Namespace,
+				KubeConfig:          kubeconfig,
+				OperatorFingerprint: "eirini-loggregator-bridge", // Not really used for now, but setting it up for future
+				FilterEiriniApps:    &filter,
+			})
 
-		err = podwatcher.NewPodWatcher(config, kubeClient).Run()
-		if err != nil {
-			LogError(err.Error())
-			os.Exit(1)
-		}
+		x.AddWatcher(podwatcher.NewPodWatcher(config))
+
+		x.Watch()
 	},
 }
 
@@ -74,21 +73,4 @@ func initConfig() {
 		os.Exit(1)
 	}
 	viper.Unmarshal(&config)
-}
-
-// Returns a kube client to be used to talk to the kube API
-// For now only works in cluster.
-func GetKubeClient() (*kubernetes.Clientset, error) {
-	// InClusterConfig when flags are empty
-	c, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse kube config")
-	}
-
-	clientset, err := kubernetes.NewForConfig(c)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create clientset")
-	}
-
-	return clientset, nil
 }
