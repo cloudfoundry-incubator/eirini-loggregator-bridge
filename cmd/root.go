@@ -37,7 +37,7 @@ var rootCmd = &cobra.Command{
 				FilterEiriniApps:    &filter,
 			})
 
-		x.AddWatcher(podwatcher.NewPodWatcher(config))
+		x.AddWatcher(podwatcher.NewPodWatcher(config, x))
 
 		x.Watch()
 	},

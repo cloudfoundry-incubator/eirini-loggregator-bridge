@@ -3,6 +3,7 @@ package podwatcher_test
 import (
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/podwatcher"
+	eirinixcatalog "github.com/SUSE/eirinix/testing"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -11,11 +12,11 @@ import (
 )
 
 var _ = Describe("podwatcher", func() {
-
+	catalog := eirinixcatalog.NewCatalog()
 	Describe("PodWatcher Config", func() {
 		Context("when initializing", func() {
 			It("sets the config", func() {
-				pw := NewPodWatcher(config.ConfigType{Namespace: "test"})
+				pw := NewPodWatcher(config.ConfigType{Namespace: "test"}, catalog.SimpleManager())
 				cpw, ok := pw.(*PodWatcher)
 				Expect(ok).To(BeTrue())
 				Expect(cpw.Config).ToNot(BeNil())
@@ -34,7 +35,7 @@ var _ = Describe("podwatcher", func() {
 				Spec:       corev1.PodSpec{Containers: []corev1.Container{{}}},
 				Status:     corev1.PodStatus{},
 			}
-			cl = &ContainerList{}
+			cl = &ContainerList{Containers: map[string]*Container{}}
 		})
 
 		Context("when containers are running", func() {

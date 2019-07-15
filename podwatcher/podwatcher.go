@@ -14,21 +14,37 @@ import (
 type PodWatcher struct {
 	Config     config.ConfigType
 	Containers ContainerList
+	Manager    eirinix.Manager
 }
 
-type ContainerList map[string]*Container
+type Container struct {
+	killChannel   chan bool
+	PodName       string
+	Namespace     string
+	Name          string
+	PodUID        string
+	UID           string
+	InitContainer bool
+	ContainerList *ContainerList
+}
+
+type ContainerList struct {
+	PodWatcher *PodWatcher
+	Containers map[string]*Container
+}
 
 func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
-	c, ok := (*cl)[uid]
+	c, ok := cl.Containers[uid]
 	return c, ok
 }
 
 func (cl *ContainerList) AddContainer(c *Container) {
-	(*cl)[c.UID] = c
+	c.ContainerList = cl
+	cl.Containers[c.UID] = c
 }
 
-// EnsureContainer make sure the container exists in the list
-// and we are monitoring it.
+// EnsureContainer make sure the container exists in the list and we are
+// monitoring it.
 func (cl ContainerList) EnsureContainer(c *Container) error {
 	// TODO: implement this
 	LogDebug(c.UID + ": ensuring container is monitored")
@@ -43,6 +59,11 @@ func (cl ContainerList) RemovePODContainers(podUID string) error {
 	// TODO: Fix this, and remove all containers belonging to a POD
 	LogDebug("Removing POD's containers ", podUID)
 
+	return nil
+}
+
+// Tail connects to the Kube
+func (c Container) Tail() error {
 	return nil
 }
 
@@ -103,25 +124,19 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 	return nil
 }
 
-type Container struct {
-	killChannel   chan bool
-	PodName       string
-	Namespace     string
-	Name          string
-	PodUID        string
-	UID           string
-	InitContainer bool
-}
+func NewPodWatcher(config config.ConfigType, manager eirinix.Manager) eirinix.Watcher {
+	pw := &PodWatcher{
+		Config:  config,
+		Manager: manager}
+	// We need a way to go up the hierarchy (e.g. to access the Manager from the Container):
+	// Manager -> PodWatcher -> ContainerList -> Container
+	pw.Containers = ContainerList{PodWatcher: pw, Containers: map[string]*Container{}}
 
-func NewPodWatcher(config config.ConfigType) eirinix.Watcher {
-	return &PodWatcher{
-		Config: config,
-	}
+	return pw
 }
 
 func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 	manager.GetLogger().Debug("Received event: ", e)
-
 	if e.Object == nil {
 		// Closed because of error
 		// TODO: Handle errors ( maybe kill the whole application )
