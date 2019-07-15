@@ -6,7 +6,6 @@ import (
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -45,10 +44,9 @@ func (cl *ContainerList) AddContainer(c *Container) {
 
 func (cl *ContainerList) RemoveContainer(uid string) error {
 	_, ok := cl.GetContainer(uid)
-	if !ok {
-		return errors.New("No container found")
+	if ok {
+		// TODO: Cleanup goroutine with killChannel
 	}
-	// TODO: Cleanup goroutine with killChannel
 	delete(cl.Containers, uid)
 	return nil
 }

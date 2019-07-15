@@ -43,9 +43,20 @@ var _ = Describe("podwatcher", func() {
 				pod.Spec.Containers = []corev1.Container{
 					{Name: "testcontainer"},
 				}
+				pod.Spec.InitContainers = []corev1.Container{
+					{Name: "testinitcontainer"},
+				}
 				pod.Status.ContainerStatuses = []corev1.ContainerStatus{
 					{
 						Name: "testcontainer",
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+				}
+				pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+					{
+						Name: "testinitcontainer",
 						State: corev1.ContainerState{
 							Running: &corev1.ContainerStateRunning{},
 						},
@@ -59,15 +70,127 @@ var _ = Describe("podwatcher", func() {
 				cont, ok := cl.GetContainer("poduid-testcontainer")
 				Expect(ok).Should(BeTrue())
 				Expect(cont.Name).To(Equal("testcontainer"))
+				cont, ok = cl.GetContainer("poduid-testinitcontainer")
+				Expect(ok).Should(BeTrue())
+				Expect(cont.Name).To(Equal("testinitcontainer"))
 			})
 		})
 
-		Context("when containers aren't running", func() {
+		Context("when more containers for the same pod are added", func() {
+			BeforeEach(func() {
+				pod.Spec.Containers = []corev1.Container{
+					{Name: "testcontainer"},
+				}
+				pod.Spec.InitContainers = []corev1.Container{
+					{Name: "testinitcontainer"},
+				}
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+					{
+						Name: "testcontainer",
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+				}
+				pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+					{
+						Name: "testinitcontainer",
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+				}
+			})
+
+			It("Adds the container in the containerlist", func() {
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				cont, ok := cl.GetContainer("poduid-testcontainer")
+				Expect(ok).Should(BeTrue())
+				Expect(cont.Name).To(Equal("testcontainer"))
+				cont, ok = cl.GetContainer("poduid-testinitcontainer")
+				Expect(ok).Should(BeTrue())
+				Expect(cont.Name).To(Equal("testinitcontainer"))
+			})
+		})
+
+		Context("when containers are added but are not running", func() {
+			BeforeEach(func() {
+				cl.Containers = map[string]*Container{
+					"poduid-mycontainer": {
+						Name: "MyContainer",
+						UID:  "myContainerUID",
+					},
+					"poduid-myinitcontainer": {
+						Name:          "MyInitContainer",
+						UID:           "myInitContainerUID",
+						InitContainer: true,
+					},
+				}
+
+				pod.Spec.Containers = []corev1.Container{
+					{Name: "mycontainer"},
+					{Name: "mycontainer2"},
+				}
+				pod.Spec.InitContainers = []corev1.Container{
+					{Name: "myinitcontainer"},
+					{Name: "myinitcontainer2"},
+				}
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+					{
+						Name: "mycontainer",
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+					{
+						Name: "mycontainer2",
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+				}
+				pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+					{
+						Name: "myinitcontainer",
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+					{
+						Name: "myinitcontainer2",
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+				}
+			})
+
+			It("does not add the containers in the containerlist", func() {
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				_, ok := cl.GetContainer("poduid-mycontainer")
+				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("poduid-mycontainer2")
+				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("poduid-myinitcontainer")
+				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("poduid-myinitcontainer2")
+				Expect(ok).Should(BeTrue())
+			})
+		})
+
+		Context("when containers are completely removed", func() {
 			BeforeEach(func() {
 				cl.Containers = map[string]*Container{
 					"myContainerUID": {
 						Name: "MyContainer",
 						UID:  "myContainerUID",
+					},
+					"myInitContainerUID": {
+						Name:          "MyInitContainer",
+						UID:           "myInitContainerUID",
+						InitContainer: true,
 					},
 				}
 
@@ -79,21 +202,106 @@ var _ = Describe("podwatcher", func() {
 			It("Removes the container from the containerlist", func() {
 				_, ok := cl.GetContainer("myContainerUID")
 				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("myInitContainerUID")
+				Expect(ok).Should(BeTrue())
 				err := cl.EnsurePodStatus(pod)
 				Expect(err).To(BeNil())
 				_, ok = cl.GetContainer("myContainerUID")
 				Expect(ok).Should(BeFalse())
+				_, ok = cl.GetContainer("myInitContainerUID")
+				Expect(ok).Should(BeFalse())
 			})
 		})
 
-		Context("when containers are added (sidecars)", func() {
+		Context("when containers don't have status", func() {
+			BeforeEach(func() {
+				cl.Containers = map[string]*Container{
+					"poduid-mycontainer": {
+						Name: "MyContainer",
+						UID:  "myContainerUID",
+					},
+					"poduid-myinitcontainer": {
+						Name:          "MyInitContainer",
+						UID:           "myInitContainerUID",
+						InitContainer: true,
+					},
+				}
+
+				// The container exist in the pod we get with the Event but doesn't has
+				// a status.
+				pod.Spec.Containers = []corev1.Container{
+					{Name: "mycontainer"},
+				}
+				pod.Spec.InitContainers = []corev1.Container{
+					{Name: "myinitcontainer"},
+				}
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{}
+			})
+
+			It("Removes the container from the containerlist", func() {
+				_, ok := cl.GetContainer("poduid-mycontainer")
+				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("poduid-myinitcontainer")
+				Expect(ok).Should(BeTrue())
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				_, ok = cl.GetContainer("poduid-mycontainer")
+				Expect(ok).Should(BeFalse())
+				_, ok = cl.GetContainer("poduid-myinitcontainer")
+				Expect(ok).Should(BeFalse())
+			})
 		})
 
-		Context("when container is removed", func() {})
+		Context("when containers have a non-running status", func() {
+			BeforeEach(func() {
+				cl.Containers = map[string]*Container{
+					"poduid-mycontainer": {
+						Name: "MyContainer",
+						UID:  "myContainerUID",
+					},
+					"poduid-myinitcontainer": {
+						Name:          "MyInitContainer",
+						UID:           "myInitContainerUID",
+						InitContainer: true,
+					},
+				}
 
-		Context("when initcontainers are running, and containers are not", func() {
+				// The container exist in the pod we get with the Event but doesn't has
+				// a status.
+				pod.Spec.Containers = []corev1.Container{
+					{Name: "mycontainer"},
+				}
+				pod.Spec.InitContainers = []corev1.Container{
+					{Name: "myinitcontainer"},
+				}
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+					{
+						Name: "myinitcontainer",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{},
+						},
+					},
+					{
+						Name: "mycontainer",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{},
+						},
+					},
+				}
+			})
+
+			It("Removes the container from the containerlist", func() {
+				_, ok := cl.GetContainer("poduid-mycontainer")
+				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("poduid-myinitcontainer")
+				Expect(ok).Should(BeTrue())
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				_, ok = cl.GetContainer("poduid-mycontainer")
+				Expect(ok).Should(BeFalse())
+				_, ok = cl.GetContainer("poduid-myinitcontainer")
+				Expect(ok).Should(BeFalse())
+			})
 		})
-
 	})
-
 })
