@@ -63,6 +63,27 @@ var _ = Describe("podwatcher", func() {
 		})
 
 		Context("when containers aren't running", func() {
+			BeforeEach(func() {
+				cl.Containers = map[string]*Container{
+					"myContainerUID": {
+						Name: "MyContainer",
+						UID:  "myContainerUID",
+					},
+				}
+
+				// The container doesn't exist in the pod we get with the Event
+				pod.Spec.Containers = []corev1.Container{}
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{}
+			})
+
+			It("Removes the container from the containerlist", func() {
+				_, ok := cl.GetContainer("myContainerUID")
+				Expect(ok).Should(BeTrue())
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				_, ok = cl.GetContainer("myContainerUID")
+				Expect(ok).Should(BeFalse())
+			})
 		})
 
 		Context("when containers are added (sidecars)", func() {

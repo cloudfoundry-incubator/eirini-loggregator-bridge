@@ -6,7 +6,7 @@ import (
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
-
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -41,6 +41,16 @@ func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
 func (cl *ContainerList) AddContainer(c *Container) {
 	c.ContainerList = cl
 	cl.Containers[c.UID] = c
+}
+
+func (cl *ContainerList) RemoveContainer(uid string) error {
+	_, ok := cl.GetContainer(uid)
+	if !ok {
+		return errors.New("No container found")
+	}
+	// TODO: Cleanup goroutine with killChannel
+	delete(cl.Containers, uid)
+	return nil
 }
 
 // EnsureContainer make sure the container exists in the list and we are
@@ -86,8 +96,14 @@ func findContainerState(name string, containerStatuses []corev1.ContainerStatus)
 // the relevant gorouting (if it is still running, it could already be stopped
 // because of an error).
 func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
+	// Lookup maps for event containers, to make comparison with our known
+	// state faster.
+	podInitContainers := map[string]string{}
+	podContainers := map[string]string{}
+
 	for _, c := range pod.Spec.InitContainers {
 		cUID := generateContainerUID(pod, c)
+		podInitContainers[cUID] = cUID
 		cState := findContainerState(c.Name, pod.Status.InitContainerStatuses)
 		//		LogDebug("status:", pod.Status.InitContainerStatuses[k].State)
 		if cState != nil && cState.Running != nil {
@@ -100,12 +116,18 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 				InitContainer: true,
 			})
 		} else {
+			err := cl.RemoveContainer(cUID)
+			if err != nil {
+				return err
+			}
 			LogDebug(cUID + " init container is not running, ensure we are NOT streaming")
 		}
 
 	}
+
 	for _, c := range pod.Spec.Containers {
 		cUID := generateContainerUID(pod, c)
+		podContainers[cUID] = cUID
 		cState := findContainerState(c.Name, pod.Status.ContainerStatuses)
 		if cState != nil && cState.Running != nil {
 			cl.EnsureContainer(&Container{Name: c.Name,
@@ -117,10 +139,28 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 				InitContainer: false,
 			})
 		} else {
+			err := cl.RemoveContainer(cUID)
+			if err != nil {
+				return err
+			}
 			LogDebug(cUID + " container is not running, ensure we are NOT streaming")
 		}
 
 	}
+
+	// Cleanup left-over containers from our list
+	for _, c := range cl.Containers {
+		if c.InitContainer {
+			if _, ok := podInitContainers[c.UID]; !ok {
+				cl.RemoveContainer(c.UID)
+			}
+		} else {
+			if _, ok := podContainers[c.UID]; !ok {
+				cl.RemoveContainer(c.UID)
+			}
+		}
+	}
+
 	return nil
 }
 
