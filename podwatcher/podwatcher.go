@@ -2,12 +2,15 @@ package podwatcher
 
 import (
 	"fmt"
-
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
+	"github.com/pkg/errors"
+	"io"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"strconv"
 )
 
 type PodWatcher struct {
@@ -40,6 +43,9 @@ func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
 func (cl *ContainerList) AddContainer(c *Container) {
 	c.ContainerList = cl
 	cl.Containers[c.UID] = c
+
+	LogDebug("Adding container ", c.UID)
+	go panic(c.Tail())
 }
 
 func (cl *ContainerList) RemoveContainer(uid string) error {
@@ -70,8 +76,68 @@ func (cl ContainerList) RemovePODContainers(podUID string) error {
 	return nil
 }
 
+func (c *Container) Write(b []byte) (int, error) {
+	/*
+	   tlsConfig, err := loggregator.NewIngressTLSConfig(
+	   		os.Getenv("LOGGREGATOR_CA_PATH"),
+	   		os.Getenv("LOGGREGATOR_CERT_PATH"),
+	   		os.Getenv("LOGGREGATOR_CERT_KEY_PATH"),
+	   	)
+	   	if err != nil {
+	   		return 0, err
+	   	}
+
+	   	loggregatorClient, err := loggregator.NewIngressClient(
+	   		tlsConfig,
+	   		// Temporary make flushing more frequent to be able to debug
+	   		loggregator.WithBatchFlushInterval(3*time.Second),
+	   		loggregator.WithAddr(os.Getenv("LOGGREGATOR_ENDPOINT")),
+	   	)
+
+	   	if err != nil {
+	   		return 0, err
+	   	}
+	*/
+	LogDebug("POD OUTPUT: " + string(b))
+
+	//loggregatorClient.Emit(lw.Envelope(b))
+
+	return len(b), nil
+}
+
 // Tail connects to the Kube
 func (c Container) Tail() error {
+	manager := c.ContainerList.PodWatcher.Manager
+	config, err := manager.GetKubeConnection()
+	if err != nil {
+		return err
+	}
+
+	kubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create a kube client")
+	}
+
+	req := kubeClient.CoreV1().RESTClient().Get().
+		Namespace(c.ContainerList.PodWatcher.Config.Namespace).
+		Name(c.PodName).
+		Resource("pods").
+		SubResource("log").
+		Param("follow", strconv.FormatBool(true)).
+		Param("container", c.Name).
+		Param("previous", strconv.FormatBool(false)).
+		Param("timestamps", strconv.FormatBool(false))
+	readCloser, err := req.Stream()
+	if err != nil {
+		return err
+	}
+
+	defer readCloser.Close()
+	_, err = io.Copy(&c, readCloser)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
