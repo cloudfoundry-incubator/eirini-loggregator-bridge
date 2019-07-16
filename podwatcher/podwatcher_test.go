@@ -192,14 +192,27 @@ var _ = Describe("podwatcher", func() {
 			AfterEach(func() { cl.Tails.Wait() })
 			BeforeEach(func() {
 				cl.Containers = map[string]*Container{
-					"myContainerUID": {
-						Name: "MyContainer",
-						UID:  "myContainerUID",
+					"podContainerUID": {
+						Name:   "MyContainer",
+						UID:    "podContainerUID",
+						PodUID: string(pod.UID),
 					},
-					"myInitContainerUID": {
+					"otherPodContainerUID": {
+						Name:   "MyContainer",
+						UID:    "otherPodContainerUID",
+						PodUID: "someOtherPodUID",
+					},
+					"podInitContainerUID": {
 						Name:          "MyInitContainer",
-						UID:           "myInitContainerUID",
+						UID:           "podInitContainerUID",
 						InitContainer: true,
+						PodUID:        string(pod.UID),
+					},
+					"otherPodInitContainerUID": {
+						Name:          "MyInitContainer",
+						UID:           "otherPodInitContainerUID",
+						InitContainer: true,
+						PodUID:        "someOtherPodUID",
 					},
 				}
 
@@ -208,17 +221,27 @@ var _ = Describe("podwatcher", func() {
 				pod.Status.ContainerStatuses = []corev1.ContainerStatus{}
 			})
 
-			It("Removes the container from the containerlist", func() {
-				_, ok := cl.GetContainer("myContainerUID")
+			It("Removes the pod's containers from the containerlist", func() {
+				_, ok := cl.GetContainer("podContainerUID")
 				Expect(ok).Should(BeTrue())
-				_, ok = cl.GetContainer("myInitContainerUID")
+				_, ok = cl.GetContainer("otherPodContainerUID")
 				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("podInitContainerUID")
+				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("otherPodInitContainerUID")
+				Expect(ok).Should(BeTrue())
+
 				err := cl.EnsurePodStatus(pod)
 				Expect(err).To(BeNil())
-				_, ok = cl.GetContainer("myContainerUID")
+
+				_, ok = cl.GetContainer("podContainerUID")
 				Expect(ok).Should(BeFalse())
-				_, ok = cl.GetContainer("myInitContainerUID")
+				_, ok = cl.GetContainer("podInitContainerUID")
 				Expect(ok).Should(BeFalse())
+				_, ok = cl.GetContainer("otherPodContainerUID")
+				Expect(ok).Should(BeTrue())
+				_, ok = cl.GetContainer("otherPodInitContainerUID")
+				Expect(ok).Should(BeTrue())
 			})
 		})
 

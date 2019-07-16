@@ -157,13 +157,14 @@ func (c *Container) findState(containerStatuses []corev1.ContainerStatus) {
 	}
 }
 
-// Cleanup removes containers from the containerlist if they don't exist in the given
+// cleanup removes containers from the containerlist if they don't exist in the given
 // map. This should be used to remove leftover containers from our containerlist
-// when they disappear from the pod.
-func (cl *ContainerList) Cleanup(existingContainers map[string]*Container) {
-	// TODO: !! Cleanup only containers for the given pod !! Create a test for this
+// when they disappear from the pod. existingContainers should be all containers
+// of the same pod!
+func (cl *ContainerList) cleanup(podUID string, existingPodContainers map[string]*Container) {
+	// Remove only containers for the given pod
 	for _, c := range cl.Containers {
-		if _, ok := existingContainers[c.UID]; !ok {
+		if _, ok := existingPodContainers[c.UID]; c.PodUID == podUID && !ok {
 			cl.RemoveContainer(c.UID)
 		}
 	}
@@ -218,7 +219,7 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 		cl.UpdateContainer(c)
 	}
 
-	cl.Cleanup(podContainers)
+	cl.cleanup(string(pod.UID), podContainers)
 
 	return nil
 }
