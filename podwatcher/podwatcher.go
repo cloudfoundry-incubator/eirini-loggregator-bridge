@@ -2,8 +2,6 @@ package podwatcher
 
 import (
 	"fmt"
-	"io"
-	"strconv"
 	"sync"
 
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
@@ -22,21 +20,24 @@ type PodWatcher struct {
 }
 
 type Container struct {
-	killChannel   chan bool
-	PodName       string
-	Namespace     string
-	Name          string
-	PodUID        string
-	UID           string
-	InitContainer bool
-	State         *corev1.ContainerState
+	killChannel        chan bool
+	PodName            string
+	Namespace          string
+	Name               string
+	PodUID             string
+	UID                string
+	InitContainer      bool
+	State              *corev1.ContainerState
+	LoggregatorOptions config.LoggregatorOptions
+	Loggregator        *Loggregator
+	AppMeta            *LoggregatorAppMeta
 }
 
 type ContainerList struct {
-	Containers map[string]*Container
-	KubeConfig *rest.Config
-
-	Tails sync.WaitGroup
+	Containers         map[string]*Container
+	KubeConfig         *rest.Config
+	LoggregatorOptions config.LoggregatorOptions
+	Tails              sync.WaitGroup
 }
 
 func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
@@ -46,7 +47,7 @@ func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
 
 func (cl *ContainerList) AddContainer(c *Container) {
 	cl.Containers[c.UID] = c
-	c.Read(cl.KubeConfig, &cl.Tails)
+	c.Read(cl.LoggregatorOptions, cl.KubeConfig, &cl.Tails)
 }
 
 func (cl *ContainerList) RemoveContainer(uid string) error {
@@ -70,36 +71,7 @@ func (cl ContainerList) EnsureContainer(c *Container) error {
 	return nil
 }
 
-func (c *Container) Write(b []byte) (int, error) {
-	/*
-	   tlsConfig, err := loggregator.NewIngressTLSConfig(
-	   		os.Getenv("LOGGREGATOR_CA_PATH"),
-	   		os.Getenv("LOGGREGATOR_CERT_PATH"),
-	   		os.Getenv("LOGGREGATOR_CERT_KEY_PATH"),
-	   	)
-	   	if err != nil {
-	   		return 0, err
-	   	}
-
-	   	loggregatorClient, err := loggregator.NewIngressClient(
-	   		tlsConfig,
-	   		// Temporary make flushing more frequent to be able to debug
-	   		loggregator.WithBatchFlushInterval(3*time.Second),
-	   		loggregator.WithAddr(os.Getenv("LOGGREGATOR_ENDPOINT")),
-	   	)
-
-	   	if err != nil {
-	   		return 0, err
-	   	}
-	*/
-	LogDebug("POD OUTPUT: " + string(b))
-
-	//loggregatorClient.Emit(lw.Envelope(b))
-
-	return len(b), nil
-}
-
-func (c *Container) Read(KubeConfig *rest.Config, wg *sync.WaitGroup) {
+func (c *Container) Read(LoggregatorOptions config.LoggregatorOptions, KubeConfig *rest.Config, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	go func(c *Container, w *sync.WaitGroup) {
@@ -109,6 +81,7 @@ func (c *Container) Read(KubeConfig *rest.Config, wg *sync.WaitGroup) {
 		if err != nil {
 			LogError(err.Error())
 		}
+		c.Loggregator = NewLoggregator(c.AppMeta, kubeClient, LoggregatorOptions)
 		err = c.Tail(kubeClient)
 		if err != nil {
 			LogError("Error: ", err.Error())
@@ -117,32 +90,11 @@ func (c *Container) Read(KubeConfig *rest.Config, wg *sync.WaitGroup) {
 }
 
 // Tail connects to the Kube
-func (c Container) Tail(kubeClient *kubernetes.Clientset) error {
-
+func (c *Container) Tail(kubeClient *kubernetes.Clientset) error {
 	// NOTE: We may end up implementing a cursor to get
 	// log parts as we might have log losses due to the watcher
 	// starting up late.
-	req := kubeClient.CoreV1().RESTClient().Get().
-		Namespace(c.Namespace).
-		Name(c.PodName).
-		Resource("pods").
-		SubResource("log").
-		Param("follow", strconv.FormatBool(true)).
-		Param("container", c.Name).
-		Param("previous", strconv.FormatBool(false)).
-		Param("timestamps", strconv.FormatBool(false))
-	readCloser, err := req.Stream()
-	if err != nil {
-		return err
-	}
-
-	defer readCloser.Close()
-	_, err = io.Copy(&c, readCloser)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c.Loggregator.Tail(c.Namespace, c.PodName, c.Name)
 }
 
 func (c *Container) generateUID() {
@@ -186,6 +138,12 @@ func (cl *ContainerList) UpdateContainer(c *Container) error {
 }
 
 func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
+
+	sourceType, ok := pod.GetLabels()["source_type"]
+	if ok && sourceType == "APP" {
+		sourceType = "APP/PROC/WEB"
+	}
+
 	result := map[string]*Container{}
 	// NOTE: The order of the lists matter!
 	for i, clist := range [][]corev1.Container{pod.Spec.InitContainers, pod.Spec.Containers} {
@@ -198,6 +156,18 @@ func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
 				Namespace:     pod.Namespace,
 				killChannel:   make(chan bool),
 				InitContainer: (i == 0),
+
+				AppMeta: &LoggregatorAppMeta{
+					SourceID:   pod.GetLabels()["guid"], // TODO: Handle the case when this is empty (when ? when its not an eirini app. Maybe filter for guids in eirinix?)
+					InstanceID: "0",                     // parse it from pod name( app-1-blabla)
+					SourceType: sourceType,
+					PodName:    pod.Name,
+					Namespace:  pod.Namespace,
+					Container:  c.Name,
+					// TODO: Is this correct?
+					// https://github.com/gdankov/loggregator-ci/blob/eirini/docker-images/fluentd/plugins/loggregator.rb#L54
+					Cluster: pod.GetClusterName(),
+				},
 			}
 			container.generateUID()
 			container.findState(cstatuses[i])
@@ -256,6 +226,7 @@ func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 		return
 	}
 	pw.Containers.KubeConfig = config
+	pw.Containers.LoggregatorOptions = pw.Config.GetLoggregatorOptions()
 	pw.Containers.EnsurePodStatus(pod)
 
 	// TODO:

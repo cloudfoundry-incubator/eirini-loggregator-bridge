@@ -3,7 +3,7 @@ module github.com/SUSE/eirini-loggregator-bridge
 require (
 	code.cloudfoundry.org/cf-operator v0.1.0
 	code.cloudfoundry.org/go-diodes v0.0.0-20180905200951-72629b5276e3 // indirect
-	code.cloudfoundry.org/go-loggregator v7.4.0+incompatible // indirect
+	code.cloudfoundry.org/go-loggregator v7.4.0+incompatible
 	code.cloudfoundry.org/rfc5424 v0.0.0-20180905210152-236a6d29298a // indirect
 	github.com/SUSE/eirinix v0.0.0-20190715144416-3b0c92d3ead1
 	github.com/cloudflare/cfssl v0.0.0-20181102015659-ea4033a214e7
