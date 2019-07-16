@@ -13,6 +13,8 @@ github.com/SUSE/eirinix v0.0.0-20190712103800-f680251cb3c1 h1:RbgUvJT9mykl24iHQv
 github.com/SUSE/eirinix v0.0.0-20190712103800-f680251cb3c1/go.mod h1:vjdLlXvYtKnCgLLHUIB4Wbff7FwQmk+3OkVdPjqgNE4=
 github.com/SUSE/eirinix v0.0.0-20190715104617-303647b145fa h1:Nx81T80jjNKbIzvR6uQcR7732s1Bw87dTD5utm3NPzk=
 github.com/SUSE/eirinix v0.0.0-20190715104617-303647b145fa/go.mod h1:vjdLlXvYtKnCgLLHUIB4Wbff7FwQmk+3OkVdPjqgNE4=
+github.com/SUSE/eirinix v0.0.0-20190715144416-3b0c92d3ead1 h1:S4652+cHKA7dx94uyagoqai+CYGhQMJKwhao8IlWuHg=
+github.com/SUSE/eirinix v0.0.0-20190715144416-3b0c92d3ead1/go.mod h1:vjdLlXvYtKnCgLLHUIB4Wbff7FwQmk+3OkVdPjqgNE4=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
 github.com/appscode/jsonpatch v0.0.0-20190108182946-7c0e3b262f30 h1:Kn3rqvbUFqSepE2OqVu0Pn1CbDw9IuMlONapol0zuwk=
