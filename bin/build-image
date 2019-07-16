@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -euo pipefail
+
+GIT_ROOT=${GIT_ROOT:-$(git rev-parse --show-toplevel)}
+. "${GIT_ROOT}/bin/include/versioning"
+
+BASEDIR="$(cd "$(dirname "$0")/.." && pwd)"
+DOCKER_ORG="${DOCKER_ORG:-}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-${DOCKER_ORG}eirini-loggregator-bridge:latest}"
+
+docker build --rm --no-cache -t "${DOCKER_IMAGE}" ${BASEDIR}

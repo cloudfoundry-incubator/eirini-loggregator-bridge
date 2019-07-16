@@ -4,6 +4,9 @@ all: vet lint test build
 build:
 	bin/build
 
+build-image: build
+	 bin/build-image
+
 test: test-unit
 
 gen-fakes:
