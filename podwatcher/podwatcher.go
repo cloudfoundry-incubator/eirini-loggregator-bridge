@@ -30,6 +30,7 @@ type Container struct {
 	UID           string
 	InitContainer bool
 	ContainerList *ContainerList
+	State         *corev1.ContainerState
 }
 
 type ContainerList struct {
@@ -155,23 +156,22 @@ func (c Container) Tail() error {
 	return nil
 }
 
-func generateContainerUID(pod *corev1.Pod, container corev1.Container) string {
-	return fmt.Sprintf("%s-%s", string(pod.UID), container.Name)
+func (c *Container) generateUID() {
+	c.UID = fmt.Sprintf("%s-%s", string(c.PodUID), c.Name)
 }
 
-func findContainerState(name string, containerStatuses []corev1.ContainerStatus) *corev1.ContainerState {
+func (c *Container) findState(containerStatuses []corev1.ContainerStatus) {
 	for _, status := range containerStatuses {
-		if status.Name == name {
-			return &status.State
+		if status.Name == c.Name {
+			c.State = &status.State
 		}
 	}
-	return nil
 }
 
 // Cleanup removes containers from the containerlist if they don't exist in the given
 // map. This should be used to remove leftover containers from our containerlist
 // when they disappear from the pod.
-func (cl ContainerList) Cleanup(existingContainers map[string]string) {
+func (cl *ContainerList) Cleanup(existingContainers map[string]*Container) {
 	for _, c := range cl.Containers {
 		if _, ok := existingContainers[c.UID]; !ok {
 			cl.RemoveContainer(c.UID)
@@ -179,62 +179,58 @@ func (cl ContainerList) Cleanup(existingContainers map[string]string) {
 	}
 }
 
+// UpdateContainer decides whether a container should be added, left alone
+// or removed from the container list. It does that but checking the state of
+// of the container.
+func (cl *ContainerList) UpdateContainer(c *Container) error {
+	LogDebug("I'm checking container with state", c.State)
+	if c.State != nil && c.State.Running != nil {
+		LogDebug("I'm adding container", c)
+		cl.EnsureContainer(c)
+	} else {
+		err := cl.RemoveContainer(c.UID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
+	result := map[string]*Container{}
+	// NOTE: The order of the lists matter!
+	for i, clist := range [][]corev1.Container{pod.Spec.InitContainers, pod.Spec.Containers} {
+		cstatuses := [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses}
+		for _, c := range clist {
+			container := &Container{
+				Name:          c.Name,
+				PodName:       pod.Name,
+				PodUID:        string(pod.UID),
+				Namespace:     pod.Namespace,
+				killChannel:   make(chan bool),
+				InitContainer: (i == 0),
+			}
+			container.generateUID()
+			container.findState(cstatuses[i])
+			result[container.UID] = container
+		}
+	}
+	return result
+}
+
 // EnsurePodStatus handles a pod event by adding or removing container tailing
 // goroutines. Every running container in the monitored namespace has its own
 // goroutine that reads its log stream. When a container is stopped we stop
 // the relevant gorouting (if it is still running, it could already be stopped
 // because of an error).
-func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
-	// Lookup maps for event containers, to make comparison with our known
-	// state faster.
-	existingContainers := map[string]string{}
+func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
+	podContainers := ExtractContainersFromPod(pod)
 
-	for _, c := range pod.Spec.InitContainers {
-		cUID := generateContainerUID(pod, c)
-		existingContainers[cUID] = cUID
-		cState := findContainerState(c.Name, pod.Status.InitContainerStatuses)
-		//		LogDebug("status:", pod.Status.InitContainerStatuses[k].State)
-		if cState != nil && cState.Running != nil {
-			cl.EnsureContainer(&Container{Name: c.Name,
-				PodName:       pod.Name,
-				PodUID:        string(pod.UID),
-				UID:           cUID,
-				Namespace:     pod.Namespace,
-				killChannel:   make(chan bool),
-				InitContainer: true,
-			})
-		} else {
-			err := cl.RemoveContainer(cUID)
-			if err != nil {
-				return err
-			}
-			LogDebug(cUID + " init container is not running, ensure we are NOT streaming")
-		}
+	for _, c := range podContainers {
+		cl.UpdateContainer(c)
 	}
 
-	for _, c := range pod.Spec.Containers {
-		cUID := generateContainerUID(pod, c)
-		existingContainers[cUID] = cUID
-		cState := findContainerState(c.Name, pod.Status.ContainerStatuses)
-		if cState != nil && cState.Running != nil {
-			cl.EnsureContainer(&Container{Name: c.Name,
-				PodName:       pod.Name,
-				PodUID:        string(pod.UID),
-				UID:           cUID,
-				Namespace:     pod.Namespace,
-				killChannel:   make(chan bool),
-				InitContainer: false,
-			})
-		} else {
-			err := cl.RemoveContainer(cUID)
-			if err != nil {
-				return err
-			}
-			LogDebug(cUID + " container is not running, ensure we are NOT streaming")
-		}
-	}
-
-	cl.Cleanup(existingContainers)
+	cl.Cleanup(podContainers)
 
 	cl.Tails.Wait()
 
