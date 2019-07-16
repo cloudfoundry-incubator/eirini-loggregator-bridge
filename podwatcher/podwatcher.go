@@ -9,10 +9,10 @@ import (
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 type PodWatcher struct {
@@ -29,13 +29,12 @@ type Container struct {
 	PodUID        string
 	UID           string
 	InitContainer bool
-	ContainerList *ContainerList
 	State         *corev1.ContainerState
 }
 
 type ContainerList struct {
-	PodWatcher *PodWatcher
 	Containers map[string]*Container
+	KubeConfig *rest.Config
 
 	Tails sync.WaitGroup
 }
@@ -46,11 +45,8 @@ func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
 }
 
 func (cl *ContainerList) AddContainer(c *Container) {
-	c.ContainerList = cl
 	cl.Containers[c.UID] = c
-
-	LogDebug("Adding container ", c.UID)
-	c.Read(&cl.Tails)
+	c.Read(cl.KubeConfig, &cl.Tails)
 }
 
 func (cl *ContainerList) RemoveContainer(uid string) error {
@@ -71,13 +67,6 @@ func (cl ContainerList) EnsureContainer(c *Container) error {
 	if _, ok := cl.GetContainer(c.UID); !ok {
 		cl.AddContainer(c)
 	}
-	return nil
-}
-
-func (cl ContainerList) RemovePODContainers(podUID string) error {
-	// TODO: Fix this, and remove all containers belonging to a POD
-	LogDebug("Removing POD's containers ", podUID)
-
 	return nil
 }
 
@@ -110,11 +99,17 @@ func (c *Container) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (c *Container) Read(wg *sync.WaitGroup) {
+func (c *Container) Read(KubeConfig *rest.Config, wg *sync.WaitGroup) {
 	wg.Add(1)
+
 	go func(c *Container, w *sync.WaitGroup) {
 		defer wg.Done()
-		err := c.Tail()
+
+		kubeClient, err := kubernetes.NewForConfig(KubeConfig)
+		if err != nil {
+			LogError(err.Error())
+		}
+		err = c.Tail(kubeClient)
 		if err != nil {
 			LogError("Error: ", err.Error())
 		}
@@ -122,19 +117,13 @@ func (c *Container) Read(wg *sync.WaitGroup) {
 }
 
 // Tail connects to the Kube
-func (c Container) Tail() error {
-	manager := c.ContainerList.PodWatcher.Manager
-	config, err := manager.GetKubeConnection()
-	if err != nil {
-		return err
-	}
+func (c Container) Tail(kubeClient *kubernetes.Clientset) error {
 
-	kubeClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return errors.Wrap(err, "Failed to create a kube client")
-	}
+	// NOTE: We may end up implementing a cursor to get
+	// log parts as we might have log losses due to the watcher
+	// starting up late.
 	req := kubeClient.CoreV1().RESTClient().Get().
-		Namespace(c.ContainerList.PodWatcher.Config.Namespace).
+		Namespace(c.Namespace).
 		Name(c.PodName).
 		Resource("pods").
 		SubResource("log").
@@ -172,6 +161,7 @@ func (c *Container) findState(containerStatuses []corev1.ContainerStatus) {
 // map. This should be used to remove leftover containers from our containerlist
 // when they disappear from the pod.
 func (cl *ContainerList) Cleanup(existingContainers map[string]*Container) {
+	// TODO: !! Cleanup only containers for the given pod !! Create a test for this
 	for _, c := range cl.Containers {
 		if _, ok := existingContainers[c.UID]; !ok {
 			cl.RemoveContainer(c.UID)
@@ -183,9 +173,7 @@ func (cl *ContainerList) Cleanup(existingContainers map[string]*Container) {
 // or removed from the container list. It does that but checking the state of
 // of the container.
 func (cl *ContainerList) UpdateContainer(c *Container) error {
-	LogDebug("I'm checking container with state", c.State)
 	if c.State != nil && c.State.Running != nil {
-		LogDebug("I'm adding container", c)
 		cl.EnsureContainer(c)
 	} else {
 		err := cl.RemoveContainer(c.UID)
@@ -232,20 +220,18 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 
 	cl.Cleanup(podContainers)
 
-	cl.Tails.Wait()
-
 	return nil
 }
 
-func NewPodWatcher(config config.ConfigType, manager eirinix.Manager) eirinix.Watcher {
-	pw := &PodWatcher{
-		Config:  config,
-		Manager: manager}
-	// We need a way to go up the hierarchy (e.g. to access the Manager from the Container):
-	// Manager -> PodWatcher -> ContainerList -> Container
-	pw.Containers = ContainerList{PodWatcher: pw, Containers: map[string]*Container{}}
+func NewPodWatcher(config config.ConfigType) eirinix.Watcher {
+	return &PodWatcher{
+		Config:     config,
+		Containers: ContainerList{Containers: map[string]*Container{}},
+	}
+}
 
-	return pw
+func (pw *PodWatcher) Finish() {
+	pw.Containers.Tails.Wait()
 }
 
 func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
@@ -260,10 +246,15 @@ func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
-		manager.GetLogger().Error("Received non-pod object in watcher channel")
+		LogError("Received non-pod object in watcher channel")
 		return
 	}
-
+	config, err := manager.GetKubeConnection()
+	if err != nil {
+		LogError(err.Error())
+		return
+	}
+	pw.Containers.KubeConfig = config
 	pw.Containers.EnsurePodStatus(pod)
 
 	// TODO:

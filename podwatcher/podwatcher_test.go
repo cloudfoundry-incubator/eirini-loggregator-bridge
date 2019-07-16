@@ -3,28 +3,26 @@ package podwatcher_test
 import (
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/podwatcher"
-	eirinixcatalog "github.com/SUSE/eirinix/testing"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 )
 
 var _ = Describe("podwatcher", func() {
-	catalog := eirinixcatalog.NewCatalog()
 	cl := &ContainerList{}
 
 	BeforeEach(func() {
-		sw := NewPodWatcher(config.ConfigType{Namespace: "test"}, catalog.SimpleManager())
-		simpleWatcherImplementation, _ := sw.(*PodWatcher)
-		cl = &ContainerList{PodWatcher: simpleWatcherImplementation}
+		cl = &ContainerList{KubeConfig: &rest.Config{}}
 	})
+	AfterEach(func() { cl.Tails.Wait() })
 
 	Describe("PodWatcher Config", func() {
 		Context("when initializing", func() {
 			It("sets the config", func() {
-				pw := NewPodWatcher(config.ConfigType{Namespace: "test"}, catalog.SimpleManager())
+				pw := NewPodWatcher(config.ConfigType{Namespace: "test"})
 				cpw, ok := pw.(*PodWatcher)
 				Expect(ok).To(BeTrue())
 				Expect(cpw.Config).ToNot(BeNil())
@@ -44,6 +42,7 @@ var _ = Describe("podwatcher", func() {
 			}
 			cl.Containers = map[string]*Container{}
 		})
+		AfterEach(func() { cl.Tails.Wait() })
 
 		Context("when containers are running", func() {
 			BeforeEach(func() {
@@ -84,6 +83,7 @@ var _ = Describe("podwatcher", func() {
 		})
 
 		Context("when more containers for the same pod are added", func() {
+			AfterEach(func() { cl.Tails.Wait() })
 			BeforeEach(func() {
 				pod.Spec.Containers = []corev1.Container{
 					{Name: "testcontainer"},
@@ -122,6 +122,7 @@ var _ = Describe("podwatcher", func() {
 		})
 
 		Context("when containers are added but are not running", func() {
+			AfterEach(func() { cl.Tails.Wait() })
 			BeforeEach(func() {
 				cl.Containers = map[string]*Container{
 					"poduid-mycontainer": {
@@ -188,6 +189,7 @@ var _ = Describe("podwatcher", func() {
 		})
 
 		Context("when containers are completely removed", func() {
+			AfterEach(func() { cl.Tails.Wait() })
 			BeforeEach(func() {
 				cl.Containers = map[string]*Container{
 					"myContainerUID": {
@@ -221,6 +223,7 @@ var _ = Describe("podwatcher", func() {
 		})
 
 		Context("when containers don't have status", func() {
+			AfterEach(func() { cl.Tails.Wait() })
 			BeforeEach(func() {
 				cl.Containers = map[string]*Container{
 					"poduid-mycontainer": {
@@ -260,6 +263,7 @@ var _ = Describe("podwatcher", func() {
 		})
 
 		Context("when containers have a non-running status", func() {
+			AfterEach(func() { cl.Tails.Wait() })
 			BeforeEach(func() {
 				cl.Containers = map[string]*Container{
 					"poduid-mycontainer": {
