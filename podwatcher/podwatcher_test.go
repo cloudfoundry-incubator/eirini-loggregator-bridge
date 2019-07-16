@@ -13,6 +13,14 @@ import (
 
 var _ = Describe("podwatcher", func() {
 	catalog := eirinixcatalog.NewCatalog()
+	cl := &ContainerList{}
+
+	BeforeEach(func() {
+		sw := NewPodWatcher(config.ConfigType{Namespace: "test"}, catalog.SimpleManager())
+		simpleWatcherImplementation, _ := sw.(*PodWatcher)
+		cl = &ContainerList{PodWatcher: simpleWatcherImplementation}
+	})
+
 	Describe("PodWatcher Config", func() {
 		Context("when initializing", func() {
 			It("sets the config", func() {
@@ -27,7 +35,6 @@ var _ = Describe("podwatcher", func() {
 
 	Describe("ContainerList", func() {
 
-		var cl *ContainerList
 		var pod *corev1.Pod
 		BeforeEach(func() {
 			pod = &corev1.Pod{
@@ -35,7 +42,7 @@ var _ = Describe("podwatcher", func() {
 				Spec:       corev1.PodSpec{Containers: []corev1.Container{{}}},
 				Status:     corev1.PodStatus{},
 			}
-			cl = &ContainerList{Containers: map[string]*Container{}}
+			cl.Containers = map[string]*Container{}
 		})
 
 		Context("when containers are running", func() {

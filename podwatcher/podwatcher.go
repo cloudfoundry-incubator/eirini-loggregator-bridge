@@ -2,15 +2,17 @@ package podwatcher
 
 import (
 	"fmt"
+	"io"
+	"strconv"
+	"sync"
+
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
 	"github.com/pkg/errors"
-	"io"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"strconv"
 )
 
 type PodWatcher struct {
@@ -33,6 +35,8 @@ type Container struct {
 type ContainerList struct {
 	PodWatcher *PodWatcher
 	Containers map[string]*Container
+
+	Tails sync.WaitGroup
 }
 
 func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
@@ -45,7 +49,7 @@ func (cl *ContainerList) AddContainer(c *Container) {
 	cl.Containers[c.UID] = c
 
 	LogDebug("Adding container ", c.UID)
-	go panic(c.Tail())
+	c.Read(&cl.Tails)
 }
 
 func (cl *ContainerList) RemoveContainer(uid string) error {
@@ -105,6 +109,17 @@ func (c *Container) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (c *Container) Read(wg *sync.WaitGroup) {
+	wg.Add(1)
+	go func(c *Container, w *sync.WaitGroup) {
+		defer wg.Done()
+		err := c.Tail()
+		if err != nil {
+			LogError("Error: ", err.Error())
+		}
+	}(c, wg)
+}
+
 // Tail connects to the Kube
 func (c Container) Tail() error {
 	manager := c.ContainerList.PodWatcher.Manager
@@ -117,7 +132,6 @@ func (c Container) Tail() error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to create a kube client")
 	}
-
 	req := kubeClient.CoreV1().RESTClient().Get().
 		Namespace(c.ContainerList.PodWatcher.Config.Namespace).
 		Name(c.PodName).
@@ -224,6 +238,8 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 			}
 		}
 	}
+
+	cl.Tails.Wait()
 
 	return nil
 }
