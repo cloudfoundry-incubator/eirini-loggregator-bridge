@@ -168,6 +168,17 @@ func findContainerState(name string, containerStatuses []corev1.ContainerStatus)
 	return nil
 }
 
+// Cleanup removes containers from the containerlist if they don't exist in the given
+// map. This should be used to remove leftover containers from our containerlist
+// when they disappear from the pod.
+func (cl ContainerList) Cleanup(existingContainers map[string]string) {
+	for _, c := range cl.Containers {
+		if _, ok := existingContainers[c.UID]; !ok {
+			cl.RemoveContainer(c.UID)
+		}
+	}
+}
+
 // EnsurePodStatus handles a pod event by adding or removing container tailing
 // goroutines. Every running container in the monitored namespace has its own
 // goroutine that reads its log stream. When a container is stopped we stop
@@ -176,12 +187,11 @@ func findContainerState(name string, containerStatuses []corev1.ContainerStatus)
 func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 	// Lookup maps for event containers, to make comparison with our known
 	// state faster.
-	podInitContainers := map[string]string{}
-	podContainers := map[string]string{}
+	existingContainers := map[string]string{}
 
 	for _, c := range pod.Spec.InitContainers {
 		cUID := generateContainerUID(pod, c)
-		podInitContainers[cUID] = cUID
+		existingContainers[cUID] = cUID
 		cState := findContainerState(c.Name, pod.Status.InitContainerStatuses)
 		//		LogDebug("status:", pod.Status.InitContainerStatuses[k].State)
 		if cState != nil && cState.Running != nil {
@@ -200,12 +210,11 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 			}
 			LogDebug(cUID + " init container is not running, ensure we are NOT streaming")
 		}
-
 	}
 
 	for _, c := range pod.Spec.Containers {
 		cUID := generateContainerUID(pod, c)
-		podContainers[cUID] = cUID
+		existingContainers[cUID] = cUID
 		cState := findContainerState(c.Name, pod.Status.ContainerStatuses)
 		if cState != nil && cState.Running != nil {
 			cl.EnsureContainer(&Container{Name: c.Name,
@@ -223,21 +232,9 @@ func (cl ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 			}
 			LogDebug(cUID + " container is not running, ensure we are NOT streaming")
 		}
-
 	}
 
-	// Cleanup left-over containers from our list
-	for _, c := range cl.Containers {
-		if c.InitContainer {
-			if _, ok := podInitContainers[c.UID]; !ok {
-				cl.RemoveContainer(c.UID)
-			}
-		} else {
-			if _, ok := podContainers[c.UID]; !ok {
-				cl.RemoveContainer(c.UID)
-			}
-		}
-	}
+	cl.Cleanup(existingContainers)
 
 	cl.Tails.Wait()
 
