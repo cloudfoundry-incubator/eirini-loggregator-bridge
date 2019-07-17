@@ -32,13 +32,16 @@ var _ = Describe("podwatcher", func() {
 	})
 
 	Describe("ContainerList", func() {
-
 		var pod *corev1.Pod
 		BeforeEach(func() {
 			pod = &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{UID: types.UID("poduid")},
-				Spec:       corev1.PodSpec{Containers: []corev1.Container{{}}},
-				Status:     corev1.PodStatus{},
+				ObjectMeta: metav1.ObjectMeta{
+					UID:    types.UID("poduid"),
+					Name:   "ruby-app-tmp-c6858e2e56-2",
+					Labels: map[string]string{"guid": "app-guid", "source_type": "APP"},
+				},
+				Spec:   corev1.PodSpec{Containers: []corev1.Container{{}}},
+				Status: corev1.PodStatus{},
 			}
 			cl.Containers = map[string]*Container{}
 		})
@@ -79,7 +82,54 @@ var _ = Describe("podwatcher", func() {
 				cont, ok = cl.GetContainer("poduid-testinitcontainer")
 				Expect(ok).Should(BeTrue())
 				Expect(cont.Name).To(Equal("testinitcontainer"))
+				Expect(cont.AppMeta.SourceType).To(Equal("APP/PROC/WEB"))
 			})
+
+			It("Sets the SourceType correctly when source_type is APP", func() {
+				pod.ObjectMeta.Labels["source_type"] = "APP"
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				cont, ok := cl.GetContainer("poduid-testinitcontainer")
+				Expect(ok).Should(BeTrue())
+				Expect(cont.AppMeta.SourceType).To(Equal("APP/PROC/WEB"))
+			})
+
+			It("Sets the SourceType correctly when source_type it is not APP", func() {
+				pod.ObjectMeta.Labels["source_type"] = "somethingelse"
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				cont, ok := cl.GetContainer("poduid-testinitcontainer")
+				Expect(ok).Should(BeTrue())
+				Expect(cont.AppMeta.SourceType).To(Equal("somethingelse"))
+			})
+
+			It("Sets the InstanceID to the one extraced from the pod name", func() {
+				pod.ObjectMeta.Name = "ruby-app-tmp-c6858e2e56-2"
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				cont, ok := cl.GetContainer("poduid-testinitcontainer")
+				Expect(ok).Should(BeTrue())
+				Expect(cont.Name).To(Equal("testinitcontainer"))
+				Expect(cont.AppMeta.InstanceID).To(Equal("2"))
+			})
+
+			It("Sets the InstanceID to 0 for pods with no instance id in the name (e.g. staging)", func() {
+				pod.ObjectMeta.Name = "6ad9f634-b32e-4890-b1ba-55202d95bc3a-xdcp6"
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				cont, ok := cl.GetContainer("poduid-testinitcontainer")
+				Expect(ok).Should(BeTrue())
+				Expect(cont.Name).To(Equal("testinitcontainer"))
+				Expect(cont.AppMeta.InstanceID).To(Equal("0"))
+			})
+
+			It("Doesn't add any containers if the guid is empty", func() {
+				delete(pod.ObjectMeta.Labels, "guid")
+				err := cl.EnsurePodStatus(pod)
+				Expect(err).To(BeNil())
+				Expect(len(cl.Containers)).Should(Equal(0))
+			})
+
 		})
 
 		Context("when more containers for the same pod are added", func() {

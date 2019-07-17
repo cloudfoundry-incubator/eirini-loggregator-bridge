@@ -2,6 +2,10 @@ package podwatcher
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
@@ -9,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"sync"
 )
 
 type PodWatcher struct {
@@ -19,7 +22,6 @@ type PodWatcher struct {
 }
 
 type Container struct {
-	killChannel        chan bool
 	PodName            string
 	Namespace          string
 	Name               string
@@ -52,16 +54,14 @@ func (cl *ContainerList) AddContainer(c *Container) {
 func (cl *ContainerList) RemoveContainer(uid string) error {
 	_, ok := cl.GetContainer(uid)
 	if ok {
-		// TODO: Cleanup goroutine with killChannel
+		delete(cl.Containers, uid)
 	}
-	delete(cl.Containers, uid)
 	return nil
 }
 
 // EnsureContainer make sure the container exists in the list and we are
 // monitoring it.
 func (cl ContainerList) EnsureContainer(c *Container) error {
-	// TODO: implement this
 	LogDebug(c.UID + ": ensuring container is monitored")
 
 	if _, ok := cl.GetContainer(c.UID); !ok {
@@ -102,6 +102,22 @@ func (c *Container) generateUID() {
 	c.UID = fmt.Sprintf("%s-%s", string(c.PodUID), c.Name)
 }
 
+// Extract the last part from the pod name and assigns that to the instance id
+// if that is an integer. E.g.
+// 6ad9f634-b32e-4890-b1ba-55202d95bc3a-xdcp6 -> InstanceID 0
+// ruby-app-tmp-c6858e2e56-4 -> InstanceID 4
+func (c *Container) extractInstanceID() {
+	el := strings.Split(c.PodName, "-")
+	if len(el) != 0 {
+		c.AppMeta.InstanceID = el[len(el)-1]
+		if _, err := strconv.Atoi(c.AppMeta.InstanceID); err == nil {
+			return
+		}
+	}
+
+	c.AppMeta.InstanceID = "0"
+}
+
 func (c *Container) findState(containerStatuses []corev1.ContainerStatus) {
 	for _, status := range containerStatuses {
 		if status.Name == c.Name {
@@ -139,13 +155,22 @@ func (cl *ContainerList) UpdateContainer(c *Container) error {
 }
 
 func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
-
 	sourceType, ok := pod.GetLabels()["source_type"]
 	if ok && sourceType == "APP" {
 		sourceType = "APP/PROC/WEB"
 	}
 
 	result := map[string]*Container{}
+
+	// If there is no guid, someone deployed a pod in the Eirini namespace
+	// and we are not filtering by Labels (yet) or we get a Pod which is not
+	// created by Eirini.
+	// TODO: Consider filtering in Eirinix (watchers can accept filtered pods)
+	guid, ok := pod.GetLabels()["guid"]
+	if !ok {
+		return result // empty list
+	}
+
 	// NOTE: The order of the lists matter!
 	for i, clist := range [][]corev1.Container{pod.Spec.InitContainers, pod.Spec.Containers} {
 		cstatuses := [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses}
@@ -155,12 +180,9 @@ func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
 				PodName:       pod.Name,
 				PodUID:        string(pod.UID),
 				Namespace:     pod.Namespace,
-				killChannel:   make(chan bool),
 				InitContainer: (i == 0),
-
 				AppMeta: &LoggregatorAppMeta{
-					SourceID:   pod.GetLabels()["guid"], // TODO: Handle the case when this is empty (when ? when its not an eirini app. Maybe filter for guids in eirinix?)
-					InstanceID: "0",                     // TODO: parse it from pod name( app-1-blabla)
+					SourceID:   guid,
 					SourceType: sourceType,
 					PodName:    pod.Name,
 					Namespace:  pod.Namespace,
@@ -170,6 +192,7 @@ func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
 					Cluster: pod.GetClusterName(),
 				},
 			}
+			container.extractInstanceID()
 			container.generateUID()
 			container.findState(cstatuses[i])
 			result[container.UID] = container
@@ -229,12 +252,4 @@ func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 	pw.Containers.KubeConfig = config
 	pw.Containers.LoggregatorOptions = pw.Config.GetLoggregatorOptions()
 	pw.Containers.EnsurePodStatus(pod)
-
-	// TODO:
-	// - Consume a kubeclient ✓ -> moved to eirinix
-	// - Create kube watcher ✓ -> moved to eirinix
-	// - Select on channels and handle events and spin up go routines for the new pod
-	//   Or stop goroutine for removed pods
-	//   Those goroutines read the logs  of the pod from the kube api and simply  writes metadata to a channel.
-	// - Then we have one or more reader instances that consumes the channel, converting metadata to loggregator envelopes and streams that to loggregator
 }
