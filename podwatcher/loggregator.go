@@ -3,7 +3,6 @@ package podwatcher
 import (
 	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	"errors"
 	"github.com/SUSE/eirini-loggregator-bridge/config"
 	"io"
 	"k8s.io/client-go/kubernetes"
