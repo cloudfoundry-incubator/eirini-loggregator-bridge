@@ -61,7 +61,7 @@ func (l *Loggregator) SetupLoggregatorClient() error {
 	loggregatorClient, err := loggregator.NewIngressClient(
 		tlsConfig,
 		// Temporary make flushing more frequent to be able to debug
-		loggregator.WithBatchFlushInterval(3*time.Second),
+		loggregator.WithBatchMaxSize(uint(100)),
 		loggregator.WithAddr(l.ConnectionOptions.Endpoint),
 	)
 
