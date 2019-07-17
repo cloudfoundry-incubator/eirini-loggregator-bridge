@@ -1,12 +1,15 @@
 package podwatcher
 
 import (
+	"bufio"
 	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"github.com/SUSE/eirini-loggregator-bridge/config"
+	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	"io"
 	"k8s.io/client-go/kubernetes"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -27,6 +30,8 @@ func NewLoggregator(m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, con
 }
 
 func (l *Loggregator) Envelope(message []byte) *loggregator_v2.Envelope {
+	LogDebug("Creating envelope for string: ", string(message))
+
 	return &loggregator_v2.Envelope{
 		Message: &loggregator_v2.Envelope_Log{
 			Log: &loggregator_v2.Log{
@@ -88,15 +93,27 @@ func (l *Loggregator) Tail(namespace, pod, container string) error {
 		Param("container", container).
 		Param("previous", strconv.FormatBool(false)).
 		Param("timestamps", strconv.FormatBool(false))
-	readCloser, err := req.Stream()
+	stream, err := req.Stream()
 	if err != nil {
 		return err
 	}
 
-	defer readCloser.Close()
-	_, err = io.Copy(l, readCloser)
-	if err != nil {
-		return err
+	defer stream.Close()
+	reader := bufio.NewReader(stream)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		_, err = l.Write([]byte(strings.TrimSpace(string(line))))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
