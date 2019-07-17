@@ -103,5 +103,5 @@ func (l *Loggregator) Tail(namespace, pod, container string) error {
 		return err
 	}
 
-	return errors.New("Something went wrong")
+	return nil
 }
