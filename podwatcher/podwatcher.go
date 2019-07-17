@@ -2,8 +2,6 @@ package podwatcher
 
 import (
 	"fmt"
-	"sync"
-
 	config "github.com/SUSE/eirini-loggregator-bridge/config"
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
@@ -11,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"sync"
 )
 
 type PodWatcher struct {
@@ -73,15 +72,17 @@ func (cl ContainerList) EnsureContainer(c *Container) error {
 
 func (c *Container) Read(LoggregatorOptions config.LoggregatorOptions, KubeConfig *rest.Config, wg *sync.WaitGroup) {
 	wg.Add(1)
-
 	go func(c *Container, w *sync.WaitGroup) {
 		defer wg.Done()
-
 		kubeClient, err := kubernetes.NewForConfig(KubeConfig)
 		if err != nil {
 			LogError(err.Error())
 		}
 		c.Loggregator = NewLoggregator(c.AppMeta, kubeClient, LoggregatorOptions)
+		if err = c.Loggregator.SetupLoggregatorClient(); err != nil {
+			LogError("Error: ", err.Error())
+			return
+		}
 		err = c.Tail(kubeClient)
 		if err != nil {
 			LogError("Error: ", err.Error())
@@ -159,7 +160,7 @@ func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
 
 				AppMeta: &LoggregatorAppMeta{
 					SourceID:   pod.GetLabels()["guid"], // TODO: Handle the case when this is empty (when ? when its not an eirini app. Maybe filter for guids in eirinix?)
-					InstanceID: "0",                     // parse it from pod name( app-1-blabla)
+					InstanceID: "0",                     // TODO: parse it from pod name( app-1-blabla)
 					SourceType: sourceType,
 					PodName:    pod.Name,
 					Namespace:  pod.Namespace,

@@ -73,9 +73,6 @@ func (l *Loggregator) SetupLoggregatorClient() error {
 }
 
 func (l *Loggregator) Write(b []byte) (int, error) {
-	if err := l.SetupLoggregatorClient(); err != nil {
-		return 0, err
-	}
 	l.LoggregatorClient.Emit(l.Envelope(b))
 
 	return len(b), nil

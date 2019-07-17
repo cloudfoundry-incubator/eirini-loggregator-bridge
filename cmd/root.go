@@ -39,7 +39,11 @@ var rootCmd = &cobra.Command{
 
 		x.AddWatcher(podwatcher.NewPodWatcher(config))
 
-		x.Watch()
+		err = x.Watch()
+		if err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
 	},
 }
 
