@@ -25,6 +25,15 @@ type Loggregator struct {
 	LoggregatorClient *loggregator.IngressClient
 }
 
+type LoggregatorLogger struct{}
+
+func (LoggregatorLogger) Printf(message string, args ...interface{}) {
+	LogDebug(append([]interface{}{message}, args...))
+}
+func (LoggregatorLogger) Panicf(message string, args ...interface{}) {
+	panic(message)
+}
+
 func NewLoggregator(m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, connectionOptions config.LoggregatorOptions) *Loggregator {
 	return &Loggregator{Meta: m, KubeClient: kubeClient, ConnectionOptions: connectionOptions}
 }
@@ -62,10 +71,13 @@ func (l *Loggregator) SetupLoggregatorClient() error {
 		return err
 	}
 
+	logger := LoggregatorLogger{}
+
 	loggregatorClient, err := loggregator.NewIngressClient(
 		tlsConfig,
 		// Temporary make flushing more frequent to be able to debug
 		loggregator.WithBatchMaxSize(uint(100)),
+		loggregator.WithLogger(logger),
 		loggregator.WithAddr(l.ConnectionOptions.Endpoint),
 	)
 
