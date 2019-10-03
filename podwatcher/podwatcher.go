@@ -54,6 +54,7 @@ func (cl *ContainerList) AddContainer(c *Container) {
 func (cl *ContainerList) RemoveContainer(uid string) error {
 	_, ok := cl.GetContainer(uid)
 	if ok {
+		LogDebug("Removing container: ", uid)
 		delete(cl.Containers, uid)
 	}
 	return nil
@@ -92,6 +93,7 @@ func (c *Container) Read(LoggregatorOptions config.LoggregatorOptions, KubeConfi
 
 // Tail connects to the Kube
 func (c *Container) Tail(kubeClient *kubernetes.Clientset) error {
+	LogDebug("Starting tailing on ", c.Namespace, " ", c.PodName, " ", c.Name)
 	// NOTE: We may end up implementing a cursor to get
 	// log parts as we might have log losses due to the watcher
 	// starting up late.
@@ -134,6 +136,7 @@ func (cl *ContainerList) cleanup(podUID string, existingPodContainers map[string
 	// Remove only containers for the given pod
 	for _, c := range cl.Containers {
 		if _, ok := existingPodContainers[c.UID]; c.PodUID == podUID && !ok {
+			LogDebug("Didn't find container in pods containers: ", c.UID)
 			cl.RemoveContainer(c.UID)
 		}
 	}
@@ -204,7 +207,7 @@ func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
 // EnsurePodStatus handles a pod event by adding or removing container tailing
 // goroutines. Every running container in the monitored namespace has its own
 // goroutine that reads its log stream. When a container is stopped we stop
-// the relevant gorouting (if it is still running, it could already be stopped
+// the relevant goroutine (if it is still running, it could already be stopped
 // because of an error).
 func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 	podContainers := ExtractContainersFromPod(pod)
@@ -213,6 +216,7 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 		cl.UpdateContainer(c)
 	}
 
+	LogDebug("Cleaning up container list for pod: ", pod.UID)
 	cl.cleanup(string(pod.UID), podContainers)
 
 	return nil
@@ -230,7 +234,7 @@ func (pw *PodWatcher) Finish() {
 }
 
 func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
-	manager.GetLogger().Debug("Received event: ", e)
+	LogDebug("Received event: ", fmt.Sprintf("%+v", e))
 	if e.Object == nil {
 		// Closed because of error
 		// TODO: Handle errors ( maybe kill the whole application )

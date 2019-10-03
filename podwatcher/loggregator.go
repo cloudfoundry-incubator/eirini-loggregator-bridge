@@ -105,26 +105,33 @@ func (l *Loggregator) Tail(namespace, pod, container string) error {
 		Param("container", container).
 		Param("previous", strconv.FormatBool(false)).
 		Param("timestamps", strconv.FormatBool(false))
-	stream, err := req.Stream()
-	if err != nil {
-		return err
-	}
 
-	defer stream.Close()
-	reader := bufio.NewReader(stream)
+		// Keep trying to read logs from the container even if we read EOF.
+		// This loop should only exit if the container is deleted.
+OUTER:
 	for {
-		line, err := reader.ReadBytes('\n')
-		if err == io.EOF {
-			break
-		}
-
+		stream, err := req.Stream()
 		if err != nil {
 			return err
 		}
 
-		_, err = l.Write([]byte(strings.TrimSpace(string(line))))
-		if err != nil {
-			return err
+		defer stream.Close()
+		reader := bufio.NewReader(stream)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err == io.EOF {
+				LogDebug("Reached EOF: ", namespace, ":", pod, ":", container)
+				continue OUTER
+			}
+
+			if err != nil {
+				return err
+			}
+
+			_, err = l.Write([]byte(strings.TrimSpace(string(line))))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
