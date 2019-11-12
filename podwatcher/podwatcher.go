@@ -155,7 +155,7 @@ func (cl *ContainerList) UpdateContainer(c *Container) error {
 }
 
 func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
-	sourceType, ok := pod.GetLabels()["source_type"]
+	sourceType, ok := pod.GetLabels()[eirinix.LabelSourceType]
 	if ok && sourceType == "APP" {
 		sourceType = "APP/PROC/WEB"
 	}
@@ -166,7 +166,7 @@ func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
 	// and we are not filtering by Labels (yet) or we get a Pod which is not
 	// created by Eirini.
 	// TODO: Consider filtering in Eirinix (watchers can accept filtered pods)
-	guid, ok := pod.GetLabels()["guid"]
+	guid, ok := pod.GetLabels()[eirinix.LabelGUID]
 	if !ok {
 		return result // empty list
 	}
