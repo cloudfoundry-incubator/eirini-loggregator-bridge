@@ -38,7 +38,7 @@ var _ = Describe("podwatcher", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					UID:    types.UID("poduid"),
 					Name:   "ruby-app-tmp-c6858e2e56-2",
-					Labels: map[string]string{"guid": "app-guid", "source_type": "APP"},
+					Labels: map[string]string{"cloudfoundry.org/guid": "app-guid", "cloudfoundry.org/source_type": "APP"},
 				},
 				Spec:   corev1.PodSpec{Containers: []corev1.Container{{}}},
 				Status: corev1.PodStatus{},
@@ -86,7 +86,7 @@ var _ = Describe("podwatcher", func() {
 			})
 
 			It("Sets the SourceType correctly when source_type is APP", func() {
-				pod.ObjectMeta.Labels["source_type"] = "APP"
+				pod.ObjectMeta.Labels["cloudfoundry.org/source_type"] = "APP"
 				err := cl.EnsurePodStatus(pod)
 				Expect(err).To(BeNil())
 				cont, ok := cl.GetContainer("poduid-testinitcontainer")
@@ -95,7 +95,7 @@ var _ = Describe("podwatcher", func() {
 			})
 
 			It("Sets the SourceType correctly when source_type it is not APP", func() {
-				pod.ObjectMeta.Labels["source_type"] = "somethingelse"
+				pod.ObjectMeta.Labels["cloudfoundry.org/source_type"] = "somethingelse"
 				err := cl.EnsurePodStatus(pod)
 				Expect(err).To(BeNil())
 				cont, ok := cl.GetContainer("poduid-testinitcontainer")
@@ -124,7 +124,7 @@ var _ = Describe("podwatcher", func() {
 			})
 
 			It("Doesn't add any containers if the guid is empty", func() {
-				delete(pod.ObjectMeta.Labels, "guid")
+				delete(pod.ObjectMeta.Labels, "cloudfoundry.org/guid")
 				err := cl.EnsurePodStatus(pod)
 				Expect(err).To(BeNil())
 				Expect(len(cl.Containers)).Should(Equal(0))
