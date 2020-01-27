@@ -39,7 +39,14 @@ var rootCmd = &cobra.Command{
 
 		x.AddWatcher(podwatcher.NewPodWatcher(config))
 
+		// Retry for as long as the error is WatcherChannelClosedError
 		err = x.Watch()
+		err, ok := err.(*eirinix.WatcherChannelClosedError)
+		for ok {
+			err = x.Watch()
+			err, ok = err.(*eirinix.WatcherChannelClosedError)
+		}
+
 		if err != nil {
 			LogError(err.Error())
 			os.Exit(1)

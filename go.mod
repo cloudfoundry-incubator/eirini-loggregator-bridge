@@ -4,7 +4,7 @@ require (
 	code.cloudfoundry.org/go-diodes v0.0.0-20180905200951-72629b5276e3 // indirect
 	code.cloudfoundry.org/go-loggregator v7.4.0+incompatible
 	code.cloudfoundry.org/rfc5424 v0.0.0-20180905210152-236a6d29298a // indirect
-	github.com/SUSE/eirinix v0.2.0
+	github.com/SUSE/eirinix v0.2.1-0.20200127143011-2014aa4a6748
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/onsi/ginkgo v1.10.1
