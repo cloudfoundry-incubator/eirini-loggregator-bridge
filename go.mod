@@ -4,8 +4,7 @@ require (
 	code.cloudfoundry.org/go-diodes v0.0.0-20180905200951-72629b5276e3 // indirect
 	code.cloudfoundry.org/go-loggregator v7.4.0+incompatible
 	code.cloudfoundry.org/rfc5424 v0.0.0-20180905210152-236a6d29298a // indirect
-	github.com/SUSE/eirinix v0.2.0
-	github.com/go-logfmt/logfmt v0.4.0 // indirect
+	github.com/SUSE/eirinix v0.2.1-0.20200131100111-fd343f4e2056
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/onsi/ginkgo v1.10.1
 	github.com/onsi/gomega v1.6.0
@@ -17,3 +16,5 @@ require (
 	k8s.io/klog v0.3.3 // indirect
 	k8s.io/utils v0.0.0-20190607212802-c55fbcfc754a // indirect
 )
+
+go 1.13
