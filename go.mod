@@ -7,7 +7,7 @@ require (
 	github.com/SUSE/eirinix v0.2.1-0.20200131100111-fd343f4e2056
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/onsi/ginkgo v1.12.0
-	github.com/onsi/gomega v1.6.0
+	github.com/onsi/gomega v1.9.0
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.4.0
 	k8s.io/api v0.0.0-20190409021203-6e4e0e4f393b
