@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	eirinix "github.com/SUSE/eirinix"
@@ -67,14 +68,18 @@ func initConfig() {
 	if cfgFile != "" {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
-	} else {
-		LogError("You didn't specify a config file (Use --help)")
-		os.Exit(1)
+		if err := viper.ReadInConfig(); err != nil {
+			LogError("Can't read config:", err.Error())
+			os.Exit(1)
+		}
 	}
 
-	if err := viper.ReadInConfig(); err != nil {
-		LogError("Can't read config:", err.Error())
-		os.Exit(1)
-	}
 	viper.Unmarshal(&config)
+	viper.AutomaticEnv() // read in environment variables that match
+
+	LogDebug("Namespace: ", fmt.Sprintf("%s", viper.GetString("namespace")))
+	LogDebug("Loggregator-endpoint: ", fmt.Sprintf("%s", viper.GetString("loggregator-endpoint")))
+	LogDebug("Loggregator-ca-path: ", fmt.Sprintf("%s", viper.GetString("loggregator-ca-path")))
+	LogDebug("Loggregator-cert-path: ", fmt.Sprintf("%s", viper.GetString("loggregator-cert-path")))
+	LogDebug("Loggregator-key-path: ", fmt.Sprintf("%s", viper.GetString("loggregator-key-path")))
 }
