@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"reflect"
+	"strings"
 
 	eirinix "github.com/SUSE/eirinix"
 
@@ -64,6 +66,26 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig file path. This is optional, in cluster config will be used if not set")
 }
 
+// See: https://github.com/spf13/viper/issues/188#issuecomment-399884438
+func BindEnvs(iface interface{}, parts ...string) {
+	ifv := reflect.ValueOf(iface)
+	ift := reflect.TypeOf(iface)
+	for i := 0; i < ift.NumField(); i++ {
+		v := ifv.Field(i)
+		t := ift.Field(i)
+		tv, ok := t.Tag.Lookup("mapstructure")
+		if !ok {
+			continue
+		}
+		switch v.Kind() {
+		case reflect.Struct:
+			BindEnvs(v.Interface(), append(parts, tv)...)
+		default:
+			viper.BindEnv(strings.Join(append(parts, tv), "."))
+		}
+	}
+}
+
 func initConfig() {
 	if cfgFile != "" {
 		// Use config file from the flag.
@@ -74,12 +96,15 @@ func initConfig() {
 		}
 	}
 
-	viper.Unmarshal(&config)
 	viper.AutomaticEnv() // read in environment variables that match
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
-	LogDebug("Namespace: ", fmt.Sprintf("%s", viper.GetString("namespace")))
-	LogDebug("Loggregator-endpoint: ", fmt.Sprintf("%s", viper.GetString("loggregator-endpoint")))
-	LogDebug("Loggregator-ca-path: ", fmt.Sprintf("%s", viper.GetString("loggregator-ca-path")))
-	LogDebug("Loggregator-cert-path: ", fmt.Sprintf("%s", viper.GetString("loggregator-cert-path")))
-	LogDebug("Loggregator-key-path: ", fmt.Sprintf("%s", viper.GetString("loggregator-key-path")))
+	BindEnvs(config)
+	viper.Unmarshal(&config)
+
+	LogDebug("Namespace: ", fmt.Sprintf("%s", config.Namespace))
+	LogDebug("Loggregator-endpoint: ", fmt.Sprintf("%s", config.LoggregatorEndpoint))
+	LogDebug("Loggregator-ca-path: ", fmt.Sprintf("%s", config.LoggregatorCAPath))
+	LogDebug("Loggregator-cert-path: ", fmt.Sprintf("%s", config.LoggregatorCertPath))
+	LogDebug("Loggregator-key-path: ", fmt.Sprintf("%s", config.LoggregatorKeyPath))
 }
