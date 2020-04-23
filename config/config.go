@@ -9,11 +9,11 @@ type LoggregatorOptions struct {
 }
 
 type ConfigType struct {
-	Namespace           string `mapstructure:"namespace" yaml:"namespace"`
-	LoggregatorEndpoint string `mapstructure:"loggregator-endpoint" yaml:"loggregator-endpoint"`
-	LoggregatorCAPath   string `mapstructure:"loggregator-ca-path" yaml:"loggregator-ca-path"`
-	LoggregatorCertPath string `mapstructure:"loggregator-cert-path" yaml:"loggregator-cert-path"`
-	LoggregatorKeyPath  string `mapstructure:"loggregator-key-path" yaml:"loggregator-key-path"`
+	Namespace           string `mapstructure:"namespace"`
+	LoggregatorEndpoint string `mapstructure:"loggregator-endpoint"`
+	LoggregatorCAPath   string `mapstructure:"loggregator-ca-path"`
+	LoggregatorCertPath string `mapstructure:"loggregator-cert-path"`
+	LoggregatorKeyPath  string `mapstructure:"loggregator-key-path"`
 }
 
 func (conf ConfigType) GetLoggregatorOptions() LoggregatorOptions {
