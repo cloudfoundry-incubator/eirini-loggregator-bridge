@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"bytes"
+	"fmt"
+	"io/ioutil"
 	"os"
 
 	eirinix "github.com/SUSE/eirinix"
@@ -22,6 +25,14 @@ var rootCmd = &cobra.Command{
 	Short: "eirini-loggregator-bridge streams Eirini application logs to CloudFoundry loggregator",
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
+
+		LogDebug("Namespace: ", config.Namespace)
+		LogDebug("Loggregator-endpoint: ", config.LoggregatorEndpoint)
+		LogDebug("Loggregator-ca-path: ", config.LoggregatorCAPath)
+		LogDebug("Loggregator-cert-path: ", config.LoggregatorCertPath)
+		LogDebug("Loggregator-key-path: ", config.LoggregatorKeyPath)
+		LogDebug("Starting Loggregator")
+
 		err = config.Validate()
 		if err != nil {
 			LogError(err.Error())
@@ -64,17 +75,36 @@ func init() {
 }
 
 func initConfig() {
+
+	// As Viper cannot unmarshal and merge configs from yaml automatically,
+	// define inline there the mapping explictly.
+	// See: https://github.com/spf13/viper/issues/761
+	viper.SetDefault("NAMESPACE", "")
+	viper.SetDefault("LOGGREGATOR_KEY_PATH", "")
+	viper.SetDefault("LOGGREGATOR_ENDPOINT", "")
+	viper.SetDefault("LOGGREGATOR_CA_PATH", "")
+	viper.SetDefault("LOGGREGATOR_CERT_PATH", "")
+	viper.BindEnv("namespace", "NAMESPACE")
+	viper.BindEnv("loggregator-key-path", "LOGGREGATOR_KEY_PATH")
+	viper.BindEnv("loggregator-endpoint", "LOGGREGATOR_ENDPOINT")
+	viper.BindEnv("loggregator-ca-path", "LOGGREGATOR_CA_PATH")
+	viper.BindEnv("loggregator-cert-path", "LOGGREGATOR_CERT_PATH")
+
 	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		LogError("You didn't specify a config file (Use --help)")
-		os.Exit(1)
+		yamlFile, err := ioutil.ReadFile(cfgFile)
+		if err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
+
+		viper.SetConfigType("yaml")
+		viper.ReadConfig(bytes.NewBuffer(yamlFile))
 	}
 
-	if err := viper.ReadInConfig(); err != nil {
-		LogError("Can't read config:", err.Error())
+	// Now this call will take into account the env as well
+	err := viper.Unmarshal(&config)
+	if err != nil {
+		LogError(err.Error())
 		os.Exit(1)
 	}
-	viper.Unmarshal(&config)
 }
