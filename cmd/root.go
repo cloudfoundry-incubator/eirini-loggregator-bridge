@@ -26,11 +26,11 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
 
-		LogDebug("Namespace: ", fmt.Sprintf("%s", config.Namespace))
-		LogDebug("Loggregator-endpoint: ", fmt.Sprintf("%s", config.LoggregatorEndpoint))
-		LogDebug("Loggregator-ca-path: ", fmt.Sprintf("%s", config.LoggregatorCAPath))
-		LogDebug("Loggregator-cert-path: ", fmt.Sprintf("%s", config.LoggregatorCertPath))
-		LogDebug("Loggregator-key-path: ", fmt.Sprintf("%s", config.LoggregatorKeyPath))
+		LogDebug("Namespace: ", config.Namespace)
+		LogDebug("Loggregator-endpoint: ", config.LoggregatorEndpoint)
+		LogDebug("Loggregator-ca-path: ", config.LoggregatorCAPath)
+		LogDebug("Loggregator-cert-path: ", config.LoggregatorCertPath)
+		LogDebug("Loggregator-key-path: ", config.LoggregatorKeyPath)
 		LogDebug("Starting Loggregator")
 
 		err = config.Validate()
