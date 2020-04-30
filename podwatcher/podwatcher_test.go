@@ -24,10 +24,8 @@ var _ = Describe("podwatcher", func() {
 		Context("when initializing", func() {
 			It("sets the config", func() {
 				pw := NewPodWatcher(config.ConfigType{Namespace: "test"})
-				cpw, ok := pw.(*PodWatcher)
-				Expect(ok).To(BeTrue())
-				Expect(cpw.Config).ToNot(BeNil())
-				Expect(cpw.Config.Namespace).To(Equal("test"))
+				Expect(pw.Config).ToNot(BeNil())
+				Expect(pw.Config.Namespace).To(Equal("test"))
 			})
 		})
 	})
