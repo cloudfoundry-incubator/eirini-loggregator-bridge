@@ -10,7 +10,6 @@ import (
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -254,7 +253,7 @@ func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
 	}
 
 	// Get current RV
-	lw := cache.NewListWatchFromClient(client.RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
+	lw := cache.NewListWatchFromClient(client.RESTClient(), "pods", pw.Config.Namespace, fields.Everything())
 	list, err := lw.List(metav1.ListOptions{})
 	if err != nil {
 		return err
