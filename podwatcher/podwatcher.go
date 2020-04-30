@@ -10,9 +10,14 @@ import (
 	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	eirinix "github.com/SUSE/eirinix"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 )
 
 type PodWatcher struct {
@@ -52,6 +57,7 @@ func (cl *ContainerList) AddContainer(c *Container) {
 }
 
 func (cl *ContainerList) RemoveContainer(uid string) error {
+	LogDebug("Removing container: ", uid)
 	_, ok := cl.GetContainer(uid)
 	if ok {
 		delete(cl.Containers, uid)
@@ -218,7 +224,7 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 	return nil
 }
 
-func NewPodWatcher(config config.ConfigType) eirinix.Watcher {
+func NewPodWatcher(config config.ConfigType) *PodWatcher {
 	return &PodWatcher{
 		Config:     config,
 		Containers: ContainerList{Containers: map[string]*Container{}},
@@ -229,8 +235,58 @@ func (pw *PodWatcher) Finish() {
 	pw.Containers.Tails.Wait()
 }
 
+// EnsureLogStream ensures that the already running pod logs are tracked
+// and sets the latest RV found to be able to track future changes.
+// It gets the current RV to start watching on and
+// reads the pods currently running in the namespace to
+// process them with EnsurePodStatus.
+// This allows the PodWatcher to stream logs of currently running
+// pods if restarted (or updated).
+func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
+	managerOptions := manager.GetManagerOptions()
+	client, err := manager.GetKubeClient()
+	if err != nil {
+		return err
+	}
+	config, err := manager.GetKubeConnection()
+	if err != nil {
+		return err
+	}
+
+	// Get current RV
+	lw := cache.NewListWatchFromClient(client.RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
+	list, err := lw.List(metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	metaObj, err := meta.ListAccessor(list)
+	if err != nil {
+		return err
+	}
+
+	// To avoid races, we first get the latest RV, then we take the current running pod and
+	// we ensure we are streaming their logs
+	startResourceVersion := metaObj.GetResourceVersion()
+
+	// Read current running pods and ensure the logstream is tracked
+	podlist, err := client.Pods(pw.Config.Namespace).List(metav1.ListOptions{})
+
+	for _, pod := range podlist.Items {
+		LogDebug(fmt.Sprintf("Detected running pod: %s", pod.GetName()))
+
+		pw.Containers.KubeConfig = config
+		pw.Containers.LoggregatorOptions = pw.Config.GetLoggregatorOptions()
+		pw.Containers.EnsurePodStatus(pod.DeepCopy())
+	}
+	managerOptions.WatcherStartRV = startResourceVersion
+	manager.SetManagerOptions(managerOptions)
+
+	return nil
+}
+
 func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
-	manager.GetLogger().Debug("Received event: ", e)
+	LogDebug("Received event: ", e)
 	if e.Object == nil {
 		// Closed because of error
 		// TODO: Handle errors ( maybe kill the whole application )

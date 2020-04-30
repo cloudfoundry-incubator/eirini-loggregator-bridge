@@ -39,15 +39,22 @@ var rootCmd = &cobra.Command{
 		}
 
 		filter := false
-		x := eirinix.NewManager(
-			eirinix.ManagerOptions{
-				Namespace:           config.Namespace,
-				KubeConfig:          kubeconfig,
-				OperatorFingerprint: "eirini-loggregator-bridge", // Not really used for now, but setting it up for future
-				FilterEiriniApps:    &filter,
-			})
 
-		x.AddWatcher(podwatcher.NewPodWatcher(config))
+		x := eirinix.NewManager(eirinix.ManagerOptions{
+			Namespace:           config.Namespace,
+			KubeConfig:          kubeconfig,
+			OperatorFingerprint: "eirini-loggregator-bridge", // Not really used for now, but setting it up for future
+			FilterEiriniApps:    &filter,
+		})
+
+		pw := podwatcher.NewPodWatcher(config)
+		// Setup does need the manager to get kubernetes connection
+		if err := pw.EnsureLogStream(x); err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
+
+		x.AddWatcher(pw)
 
 		err = x.Watch()
 		if err != nil {
