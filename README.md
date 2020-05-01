@@ -51,7 +51,30 @@ In that case though you have to make sure your loggregator endpoint is accessibl
 from outside the cluster.
 
 
-## Debugging
+## Development
+
+### Building docker image with local dependencies
+
+The docker image can be built with:
+
+```
+make build-image
+```
+
+To use local dependencies (e.g. to use a locally modified `eirinix` for testing),
+update the go module dependencies as normal:
+
+```
+go mod edit -replace github.com/SUSE/eirinix=../eirinix
+```
+
+Then, to build the docker image:
+
+```
+VENDOR=on make build-image
+```
+
+### Debugging
 
 You can increase the log level of the tool by setting the `EIRINI_LOGGREGATOR_BRIDGE_LOGLEVEL`
 environment variable. Allowed values are: "DEBUG", "INFO", "WARN", "ERROR" (Default is "WARN")

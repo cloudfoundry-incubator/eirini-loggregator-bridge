@@ -9,4 +9,10 @@ BASEDIR="$(cd "$(dirname "$0")/.." && pwd)"
 DOCKER_ORG="${DOCKER_ORG:-splatform/}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-${DOCKER_ORG}eirini-loggregator-bridge:latest}"
 
-docker build --rm --no-cache -t "${DOCKER_IMAGE}" ${BASEDIR}
+build_arg=()
+if [ "${VENDOR}" = "on" ] ; then
+    GO111MODULE=on go mod vendor
+    build_arg+=( --build-arg "GO111MODULE=off" )
+fi
+
+docker build --rm --no-cache "${build_arg[@]}" -t "${DOCKER_IMAGE}" ${BASEDIR}
