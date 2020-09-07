@@ -5,11 +5,11 @@ import (
 	"io/ioutil"
 	"os"
 
-	eirinix "github.com/SUSE/eirinix"
+	eirinix "code.cloudfoundry.org/eirinix"
 
-	configpkg "github.com/SUSE/eirini-loggregator-bridge/config"
-	. "github.com/SUSE/eirini-loggregator-bridge/logger"
-	podwatcher "github.com/SUSE/eirini-loggregator-bridge/podwatcher"
+	configpkg "code.cloudfoundry.org/eirini-loggregator-bridge/config"
+	. "code.cloudfoundry.org/eirini-loggregator-bridge/logger"
+	podwatcher "code.cloudfoundry.org/eirini-loggregator-bridge/podwatcher"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

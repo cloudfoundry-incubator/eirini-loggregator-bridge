@@ -2,6 +2,10 @@ package podwatcher
 
 import (
 	"bufio"
+<<<<<<< HEAD
+=======
+	"context"
+>>>>>>> b46a8fa... Update EiriniX
 	"io"
 	"strconv"
 	"strings"
@@ -20,6 +24,7 @@ type LoggregatorAppMeta struct {
 }
 
 type Loggregator struct {
+	Context           context.Context
 	Meta              *LoggregatorAppMeta
 	ConnectionOptions config.LoggregatorOptions
 	KubeClient        *kubernetes.Clientset
@@ -35,8 +40,8 @@ func (LoggregatorLogger) Panicf(message string, args ...interface{}) {
 	panic(message)
 }
 
-func NewLoggregator(m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, connectionOptions config.LoggregatorOptions) *Loggregator {
-	return &Loggregator{Meta: m, KubeClient: kubeClient, ConnectionOptions: connectionOptions}
+func NewLoggregator(ctx context.Context, m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, connectionOptions config.LoggregatorOptions) *Loggregator {
+	return &Loggregator{Meta: m, KubeClient: kubeClient, ConnectionOptions: connectionOptions, Context: ctx}
 }
 
 func (l *Loggregator) Envelope(message []byte) *loggregator_v2.Envelope {
@@ -106,7 +111,7 @@ func (l *Loggregator) Tail(namespace, pod, container string) error {
 		Param("container", container).
 		Param("previous", strconv.FormatBool(false)).
 		Param("timestamps", strconv.FormatBool(false))
-	stream, err := req.Stream()
+	stream, err := req.Stream(l.Context)
 	if err != nil {
 		return err
 	}

@@ -1,14 +1,15 @@
 package podwatcher
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
-	config "github.com/SUSE/eirini-loggregator-bridge/config"
-	. "github.com/SUSE/eirini-loggregator-bridge/logger"
-	eirinix "github.com/SUSE/eirinix"
+	config "code.cloudfoundry.org/eirini-loggregator-bridge/config"
+	. "code.cloudfoundry.org/eirini-loggregator-bridge/logger"
+	eirinix "code.cloudfoundry.org/eirinix"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,6 +43,7 @@ type ContainerList struct {
 	Containers         map[string]*Container
 	KubeConfig         *rest.Config
 	LoggregatorOptions config.LoggregatorOptions
+	Context            context.Context
 	Tails              sync.WaitGroup
 }
 
@@ -52,7 +54,7 @@ func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
 
 func (cl *ContainerList) AddContainer(c *Container) {
 	cl.Containers[c.UID] = c
-	c.Read(cl.LoggregatorOptions, cl.KubeConfig, &cl.Tails)
+	c.Read(cl.Context, cl.LoggregatorOptions, cl.KubeConfig, &cl.Tails)
 }
 
 func (cl *ContainerList) RemoveContainer(uid string) error {
@@ -75,7 +77,7 @@ func (cl ContainerList) EnsureContainer(c *Container) error {
 	return nil
 }
 
-func (c *Container) Read(LoggregatorOptions config.LoggregatorOptions, KubeConfig *rest.Config, wg *sync.WaitGroup) {
+func (c *Container) Read(ctx context.Context, LoggregatorOptions config.LoggregatorOptions, KubeConfig *rest.Config, wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func(c *Container, w *sync.WaitGroup) {
 		defer wg.Done()
@@ -83,7 +85,7 @@ func (c *Container) Read(LoggregatorOptions config.LoggregatorOptions, KubeConfi
 		if err != nil {
 			LogError(err.Error())
 		}
-		c.Loggregator = NewLoggregator(c.AppMeta, kubeClient, LoggregatorOptions)
+		c.Loggregator = NewLoggregator(ctx, c.AppMeta, kubeClient, LoggregatorOptions)
 		if err = c.Loggregator.SetupLoggregatorClient(); err != nil {
 			LogError("Error: ", err.Error())
 			return
@@ -271,7 +273,7 @@ func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
 	startResourceVersion := metaObj.GetResourceVersion()
 
 	// Read current running pods and ensure the logstream is tracked
-	podlist, err := client.Pods(pw.Config.Namespace).List(metav1.ListOptions{})
+	podlist, err := client.Pods(pw.Config.Namespace).List(manager.GetContext(), metav1.ListOptions{})
 
 	for _, pod := range podlist.Items {
 		LogDebug(fmt.Sprintf("Detected running pod: %s", pod.GetName()))
@@ -307,6 +309,7 @@ func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 		return
 	}
 	pw.Containers.KubeConfig = config
+	pw.Containers.Context = manager.GetContext()
 	pw.Containers.LoggregatorOptions = pw.Config.GetLoggregatorOptions()
 	pw.Containers.EnsurePodStatus(pod)
 }
