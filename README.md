@@ -65,7 +65,7 @@ To use local dependencies (e.g. to use a locally modified `eirinix` for testing)
 update the go module dependencies as normal:
 
 ```
-go mod edit -replace github.com/SUSE/eirinix=../eirinix
+go mod edit -replace code.cloudfoundry.org/eirinix=../eirinix
 ```
 
 Then, to build the docker image:

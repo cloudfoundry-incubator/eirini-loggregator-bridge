@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"os"
 
@@ -22,16 +23,49 @@ var config configpkg.ConfigType
 var rootCmd = &cobra.Command{
 	Use:   "eirini-loggregator-bridge",
 	Short: "eirini-loggregator-bridge streams Eirini application logs to CloudFoundry loggregator",
+	PreRun: func(cmd *cobra.Command, args []string) {
+
+		viper.BindPFlag("operator-webhook-host", cmd.Flags().Lookup("operator-webhook-host"))
+		viper.BindPFlag("operator-webhook-port", cmd.Flags().Lookup("operator-webhook-port"))
+		viper.BindPFlag("operator-service-name", cmd.Flags().Lookup("operator-service-name"))
+		viper.BindPFlag("operator-webhook-namespace", cmd.Flags().Lookup("operator-webhook-namespace"))
+		viper.BindPFlag("register", cmd.Flags().Lookup("register"))
+
+		viper.BindEnv("operator-webhook-host", "OPERATOR_WEBHOOK_HOST")
+		viper.BindEnv("operator-webhook-port", "OPERATOR_WEBHOOK_PORT")
+		viper.BindEnv("operator-service-name", "OPERATOR_SERVICE_NAME")
+		viper.BindEnv("operator-webhook-namespace", "OPERATOR_WEBHOOK_NAMESPACE")
+		viper.BindEnv("register", "EIRINI_EXTENSION_REGISTER")
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
+		webhookHost := viper.GetString("operator-webhook-host")
+		webhookPort := viper.GetInt32("operator-webhook-port")
+		serviceName := viper.GetString("operator-service-name")
+		webhookNamespace := viper.GetString("operator-webhook-namespace")
+		register := viper.GetBool("register")
 
 		LogDebug("Namespace: ", config.Namespace)
 		LogDebug("Loggregator-endpoint: ", config.LoggregatorEndpoint)
 		LogDebug("Loggregator-ca-path: ", config.LoggregatorCAPath)
 		LogDebug("Loggregator-cert-path: ", config.LoggregatorCertPath)
 		LogDebug("Loggregator-key-path: ", config.LoggregatorKeyPath)
-		LogDebug("Starting Loggregator")
 
+		LogDebug("Webhook listening on: ", webhookHost, webhookPort)
+		LogDebug("Webhook namespace: ", webhookNamespace)
+		LogDebug("Webhook serviceName: ", serviceName)
+		LogDebug("Webhook register: ", register)
+
+		LogDebug("Starting Loggregator")
+		if webhookHost == "" {
+			LogDebug("required flag 'operator-webhook-host' not set (env variable: OPERATOR_WEBHOOK_HOST)")
+		}
+
+		RegisterWebhooks := true
+		if !register {
+			LogDebug("The extension will start without registering")
+			RegisterWebhooks = false
+		}
 		err = config.Validate()
 		if err != nil {
 			LogError(err.Error())
@@ -39,25 +73,33 @@ var rootCmd = &cobra.Command{
 		}
 
 		filter := false
-
+		ctx := context.Background()
 		x := eirinix.NewManager(eirinix.ManagerOptions{
 			Namespace:           config.Namespace,
 			KubeConfig:          kubeconfig,
+			Context:             &ctx,
 			OperatorFingerprint: "eirini-loggregator-bridge", // Not really used for now, but setting it up for future
 			FilterEiriniApps:    &filter,
+
+			Host:             webhookHost,
+			Port:             webhookPort,
+			ServiceName:      serviceName,
+			WebhookNamespace: webhookNamespace,
+			RegisterWebHook:  &RegisterWebhooks,
 		})
 
 		pw := podwatcher.NewPodWatcher(config)
 		// Setup does need the manager to get kubernetes connection
-		if err := pw.EnsureLogStream(x); err != nil {
+		if err := pw.EnsureLogStream(ctx, x); err != nil {
 			LogError(err.Error())
 			os.Exit(1)
 		}
 
-		x.AddWatcher(pw)
+		reconciler := podwatcher.NewLogReconciler(pw)
+		x.AddExtension(reconciler)
+		x.AddExtension(pw)
 
-		err = x.Watch()
-		if err != nil {
+		if err = x.Start(); err != nil {
 			LogError(err.Error())
 			os.Exit(1)
 		}
@@ -78,6 +120,11 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file")
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig file path. This is optional, in cluster config will be used if not set")
+	rootCmd.PersistentFlags().StringP("operator-webhook-host", "w", "", "Hostname/IP under which the webhook server can be reached from the cluster")
+	rootCmd.PersistentFlags().StringP("operator-webhook-port", "p", "2999", "Port the webhook server listens on")
+	rootCmd.PersistentFlags().StringP("operator-service-name", "s", "", "Service name where the webhook runs on (Optional, only needed inside kube)")
+	rootCmd.PersistentFlags().StringP("operator-webhook-namespace", "t", "", "The namespace the services lives in (Optional, only needed inside kube)")
+	rootCmd.PersistentFlags().BoolP("register", "r", true, "Register the extension")
 }
 
 func initConfig() {

@@ -45,14 +45,19 @@ type ContainerList struct {
 	LoggregatorOptions config.LoggregatorOptions
 	Context            context.Context
 	Tails              sync.WaitGroup
+	mux                sync.Mutex
 }
 
 func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
+	cl.mux.Lock()
+	defer cl.mux.Unlock()
 	c, ok := cl.Containers[uid]
 	return c, ok
 }
 
 func (cl *ContainerList) AddContainer(c *Container) {
+	cl.mux.Lock()
+	defer cl.mux.Unlock()
 	cl.Containers[c.UID] = c
 	c.Read(cl.Context, cl.LoggregatorOptions, cl.KubeConfig, &cl.Tails)
 }
@@ -61,6 +66,8 @@ func (cl *ContainerList) RemoveContainer(uid string) error {
 	LogDebug("Removing container: ", uid)
 	_, ok := cl.GetContainer(uid)
 	if ok {
+		cl.mux.Lock()
+		defer cl.mux.Unlock()
 		delete(cl.Containers, uid)
 	}
 	return nil
@@ -245,7 +252,7 @@ func (pw *PodWatcher) Finish() {
 // process them with EnsurePodStatus.
 // This allows the PodWatcher to stream logs of currently running
 // pods if restarted (or updated).
-func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
+func (pw *PodWatcher) EnsureLogStream(ctx context.Context, manager eirinix.Manager) error {
 	managerOptions := manager.GetManagerOptions()
 	client, err := manager.GetKubeClient()
 	if err != nil {
@@ -273,7 +280,7 @@ func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
 	startResourceVersion := metaObj.GetResourceVersion()
 
 	// Read current running pods and ensure the logstream is tracked
-	podlist, err := client.Pods(pw.Config.Namespace).List(manager.GetContext(), metav1.ListOptions{})
+	podlist, err := client.Pods(pw.Config.Namespace).List(ctx, metav1.ListOptions{})
 
 	for _, pod := range podlist.Items {
 		LogDebug(fmt.Sprintf("Detected running pod: %s", pod.GetName()))

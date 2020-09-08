@@ -2,19 +2,16 @@ package podwatcher
 
 import (
 	"bufio"
-<<<<<<< HEAD
-=======
 	"context"
->>>>>>> b46a8fa... Update EiriniX
 	"io"
 	"strconv"
 	"strings"
 	"time"
 
+	"code.cloudfoundry.org/eirini-loggregator-bridge/config"
+	. "code.cloudfoundry.org/eirini-loggregator-bridge/pkg/logger"
 	"code.cloudfoundry.org/go-loggregator/v8"
 	"code.cloudfoundry.org/go-loggregator/v8/rpc/loggregator_v2"
-	"github.com/SUSE/eirini-loggregator-bridge/config"
-	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	"k8s.io/client-go/kubernetes"
 )
 
