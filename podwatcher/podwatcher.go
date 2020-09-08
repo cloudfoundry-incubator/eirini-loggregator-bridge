@@ -43,8 +43,8 @@ type ContainerList struct {
 	Containers         map[string]*Container
 	KubeConfig         *rest.Config
 	LoggregatorOptions config.LoggregatorOptions
-	Context            context.Context
 	Tails              sync.WaitGroup
+	Context            context.Context
 }
 
 func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
@@ -245,7 +245,7 @@ func (pw *PodWatcher) Finish() {
 // process them with EnsurePodStatus.
 // This allows the PodWatcher to stream logs of currently running
 // pods if restarted (or updated).
-func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
+func (pw *PodWatcher) EnsureLogStream(ctx context.Context, manager eirinix.Manager) error {
 	managerOptions := manager.GetManagerOptions()
 	client, err := manager.GetKubeClient()
 	if err != nil {
@@ -255,6 +255,7 @@ func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
 	if err != nil {
 		return err
 	}
+	pw.Containers.Context = ctx
 
 	// Get current RV
 	lw := cache.NewListWatchFromClient(client.RESTClient(), "pods", pw.Config.Namespace, fields.Everything())
@@ -273,7 +274,7 @@ func (pw *PodWatcher) EnsureLogStream(manager eirinix.Manager) error {
 	startResourceVersion := metaObj.GetResourceVersion()
 
 	// Read current running pods and ensure the logstream is tracked
-	podlist, err := client.Pods(pw.Config.Namespace).List(manager.GetContext(), metav1.ListOptions{})
+	podlist, err := client.Pods(pw.Config.Namespace).List(ctx, metav1.ListOptions{})
 
 	for _, pod := range podlist.Items {
 		LogDebug(fmt.Sprintf("Detected running pod: %s", pod.GetName()))
@@ -309,7 +310,6 @@ func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 		return
 	}
 	pw.Containers.KubeConfig = config
-	pw.Containers.Context = manager.GetContext()
 	pw.Containers.LoggregatorOptions = pw.Config.GetLoggregatorOptions()
 	pw.Containers.EnsurePodStatus(pod)
 }
