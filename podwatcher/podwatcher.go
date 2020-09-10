@@ -94,7 +94,7 @@ func (c *Container) Read(ctx context.Context, LoggregatorOptions config.Loggrega
 		if err != nil {
 			LogError(err.Error())
 		}
-		c.Loggregator = NewLoggregator(ctx, c.AppMeta, kubeClient, LoggregatorOptions)
+		c.Loggregator = NewLoggregator(ctx, c.AppMeta, kubeClient, KubeConfig, LoggregatorOptions)
 		if err = c.Loggregator.SetupLoggregatorClient(); err != nil {
 			LogError("Error: ", err.Error())
 			return

@@ -42,6 +42,14 @@ func (r *logReconciler) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// name of our custom finalizer
 	myFinalizerName := "eirinix-finalizers.io/loggregator-bridge"
+	for _, c := range pod.Spec.InitContainers {
+		c.TTY = true
+
+	}
+	for _, c := range pod.Spec.Containers {
+		c.TTY = true
+
+	}
 
 	// examine DeletionTimestamp to determine if object is under deletion
 	if pod.ObjectMeta.DeletionTimestamp.IsZero() {

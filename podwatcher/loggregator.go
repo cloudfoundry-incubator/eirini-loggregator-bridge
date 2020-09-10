@@ -8,13 +8,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	flowcontrol "k8s.io/client-go/util/flowcontrol"
 
 	"code.cloudfoundry.org/eirini-loggregator-bridge/config"
-	. "code.cloudfoundry.org/eirini-loggregator-bridge/pkg/logger"
+	. "code.cloudfoundry.org/eirini-loggregator-bridge/logger"
 	"code.cloudfoundry.org/go-loggregator/v8"
 	"code.cloudfoundry.org/go-loggregator/v8/rpc/loggregator_v2"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 type LoggregatorAppMeta struct {
@@ -28,6 +31,7 @@ type Loggregator struct {
 	ConnectionOptions config.LoggregatorOptions
 	KubeClient        *kubernetes.Clientset
 	LoggregatorClient *loggregator.IngressClient
+	KubeConfig        *rest.Config
 }
 
 type LoggregatorLogger struct{}
@@ -39,8 +43,8 @@ func (LoggregatorLogger) Panicf(message string, args ...interface{}) {
 	panic(message)
 }
 
-func NewLoggregator(ctx context.Context, m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, connectionOptions config.LoggregatorOptions) *Loggregator {
-	return &Loggregator{Meta: m, KubeClient: kubeClient, ConnectionOptions: connectionOptions, Context: ctx}
+func NewLoggregator(ctx context.Context, m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, kubeConfig *rest.Config, connectionOptions config.LoggregatorOptions) *Loggregator {
+	return &Loggregator{Meta: m, KubeClient: kubeClient, ConnectionOptions: connectionOptions, Context: ctx, KubeConfig: kubeConfig}
 }
 
 func (l *Loggregator) Envelope(message []byte) *loggregator_v2.Envelope {
@@ -101,8 +105,15 @@ func (l *Loggregator) Write(b []byte) (int, error) {
 }
 
 func (l *Loggregator) Tail(namespace, pod, container string) error {
+	configShallowCopy := *l.KubeConfig
+	configShallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(configShallowCopy.QPS, configShallowCopy.Burst)
 
-	podData, err := l.KubeClient.CoreV1().Pods(namespace).Get(l.Context, pod, metav1.GetOptions{})
+	kubeClient, err := kubernetes.NewForConfig(&configShallowCopy)
+	if err != nil {
+		return errors.Wrap(err, "failed creating kubeClient")
+	}
+
+	podData, err := kubeClient.CoreV1().Pods(namespace).Get(l.Context, pod, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -123,7 +134,7 @@ func (l *Loggregator) Tail(namespace, pod, container string) error {
 		}
 	}
 
-	req := l.KubeClient.CoreV1().RESTClient().Get().
+	req := kubeClient.CoreV1().RESTClient().Get().
 		Namespace(namespace).
 		Name(pod).
 		Resource("pods").
