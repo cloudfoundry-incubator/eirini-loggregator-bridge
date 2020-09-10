@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"code.cloudfoundry.org/eirini-loggregator-bridge/config"
 	. "code.cloudfoundry.org/eirini-loggregator-bridge/pkg/logger"
 	"code.cloudfoundry.org/go-loggregator/v8"
@@ -99,14 +101,36 @@ func (l *Loggregator) Write(b []byte) (int, error) {
 }
 
 func (l *Loggregator) Tail(namespace, pod, container string) error {
+
+	podData, err := l.KubeClient.CoreV1().Pods(namespace).Get(l.Context, pod, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	follow := true
+	previous := false
+
+	// XXX: TODO inspect pod phase instead of container statuses.
+	//	podData.
+	containers := ExtractContainersFromPod(podData)
+	for _, c := range containers {
+		if c.Name == container {
+			if c.State != nil && c.State.Terminated != nil {
+				LogDebug("Grabbing logs only from terminated pod")
+				follow = false
+				previous = true
+			}
+		}
+	}
+
 	req := l.KubeClient.CoreV1().RESTClient().Get().
 		Namespace(namespace).
 		Name(pod).
 		Resource("pods").
 		SubResource("log").
-		Param("follow", strconv.FormatBool(true)).
+		Param("follow", strconv.FormatBool(follow)).
 		Param("container", container).
-		Param("previous", strconv.FormatBool(false)).
+		Param("previous", strconv.FormatBool(previous)).
 		Param("timestamps", strconv.FormatBool(false))
 	stream, err := req.Stream(l.Context)
 	if err != nil {

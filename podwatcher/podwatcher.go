@@ -37,6 +37,8 @@ type Container struct {
 	LoggregatorOptions config.LoggregatorOptions
 	Loggregator        *Loggregator
 	AppMeta            *LoggregatorAppMeta
+
+	stopChan chan interface{}
 }
 
 type ContainerList struct {
@@ -101,6 +103,11 @@ func (c *Container) Read(ctx context.Context, LoggregatorOptions config.Loggrega
 		if err != nil {
 			LogError("Error: ", err.Error())
 		}
+		// TODO: ?
+		//	err := cl.RemoveContainer(c.UID)
+		//	if err != nil {
+		//		return err
+		//	}
 	}(c, wg)
 }
 
@@ -157,13 +164,13 @@ func (cl *ContainerList) cleanup(podUID string, existingPodContainers map[string
 // or removed from the container list. It does that but checking the state of
 // of the container.
 func (cl *ContainerList) UpdateContainer(c *Container) error {
-	if c.State != nil && c.State.Running != nil {
+	if c.State != nil && (c.State.Running != nil || c.State.Terminated != nil) {
 		cl.EnsureContainer(c)
 	} else {
-		err := cl.RemoveContainer(c.UID)
-		if err != nil {
-			return err
-		}
+		//err := cl.RemoveContainer(c.UID)
+		//if err != nil {
+		//	return err
+		//}
 	}
 	return nil
 }
@@ -229,7 +236,7 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 		cl.UpdateContainer(c)
 	}
 
-	cl.cleanup(string(pod.UID), podContainers)
+	//cl.cleanup(string(pod.UID), podContainers)
 
 	return nil
 }
@@ -237,7 +244,7 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 func NewPodWatcher(config config.ConfigType) *PodWatcher {
 	return &PodWatcher{
 		Config:     config,
-		Containers: ContainerList{Containers: map[string]*Container{}},
+		Containers: ContainerList{Containers: map[string]*Container{}, mux: sync.Mutex{}},
 	}
 }
 

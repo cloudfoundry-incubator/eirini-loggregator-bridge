@@ -97,7 +97,7 @@ var rootCmd = &cobra.Command{
 
 		reconciler := podwatcher.NewLogReconciler(pw)
 		x.AddExtension(reconciler)
-		x.AddExtension(pw)
+		//	x.AddExtension(pw)
 
 		if err = x.Start(); err != nil {
 			LogError(err.Error())
