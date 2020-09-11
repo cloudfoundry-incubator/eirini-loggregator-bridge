@@ -37,7 +37,7 @@ var _ = Describe("podwatcher", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					UID:    types.UID("poduid"),
 					Name:   "ruby-app-tmp-c6858e2e56-2",
-					Labels: map[string]string{eirinix.LabelGUID: "app-guid", eirinix.LabelSourceType: "APP"},
+					Labels: map[string]string{eirinix.LabelAppGUID: "app-guid", eirinix.LabelSourceType: "APP"},
 				},
 				Spec:   corev1.PodSpec{Containers: []corev1.Container{{}}},
 				Status: corev1.PodStatus{},
@@ -123,7 +123,7 @@ var _ = Describe("podwatcher", func() {
 			})
 
 			It("Doesn't add any containers if the guid is empty", func() {
-				delete(pod.ObjectMeta.Labels, eirinix.LabelGUID)
+				delete(pod.ObjectMeta.Labels, eirinix.LabelAppGUID)
 				err := cl.EnsurePodStatus(pod)
 				Expect(err).To(BeNil())
 				Expect(len(cl.Containers)).Should(Equal(0))
