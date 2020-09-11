@@ -9,6 +9,7 @@ import (
 	log "code.cloudfoundry.org/quarks-utils/pkg/ctxlog"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -18,16 +19,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-func NewLogReconciler(pw *PodWatcher) *logReconciler {
-	return &logReconciler{pw: pw}
+func NewLogReconciler(pw *PodWatcher, gracefulStartTime string) *logReconciler {
+	if gracefulStartTime == "" {
+		gracefulStartTime = "10"
+	}
+	return &logReconciler{pw: pw, gracefulStartTime: gracefulStartTime}
 }
 
 type logReconciler struct {
-	mgr eirinix.Manager
-	pw  *PodWatcher
+	mgr               eirinix.Manager
+	pw                *PodWatcher
+	gracefulStartTime string
 }
 
 func (r *logReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	// Injects PreStart hook for gracefulStarts:
+	// In case an application is too fast to fail, we might miss logs as Kubernetes will terminate the container
+	// before the watcher had occasion to attach to stream any logs.
+	// - Finalizers let the pod terminates, not giving any chance to get logs from terminated container.
+	// - PostStop hooks doesn't guarantee execution in case of containers terminated by failures (e.g. an invalid app was pushed in Eirini)
+	// - With the PreStart instead, we give chance to the watcher to hook to the container, without modifying the standard execution flow of the app
+	gracefulStart := &v1.Lifecycle{PostStart: &v1.Handler{Exec: &v1.ExecAction{Command: []string{
+		"/bin/sh",
+		"-c", "sleep " + r.gracefulStartTime,
+	}}}}
+
 	ctx := log.NewContextWithRecorder(r.mgr.GetContext(), "loggregator-bridge-reconciler", r.mgr.GetKubeManager().GetEventRecorderFor("loggregator-bridge"))
 	pod := &corev1.Pod{}
 
@@ -40,60 +56,24 @@ func (r *logReconciler) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{Requeue: true}, err
 	}
 
-	// name of our custom finalizer
-	myFinalizerName := "eirinix-finalizers.io/loggregator-bridge"
-	for _, c := range pod.Spec.InitContainers {
-		c.TTY = true
-
+	for i, _ := range pod.Spec.InitContainers {
+		c := &pod.Spec.InitContainers[i] //	if c.Lifecycle == nil {
+		c.Lifecycle = gracefulStart
+		//		}
 	}
-	for _, c := range pod.Spec.Containers {
-		c.TTY = true
-
+	for i, _ := range pod.Spec.Containers {
+		c := &pod.Spec.Containers[i]
+		//	if c.Lifecycle == nil {
+		c.Lifecycle = gracefulStart
+		//	}
 	}
 
-	// examine DeletionTimestamp to determine if object is under deletion
-	if pod.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !containsString(pod.ObjectMeta.Finalizers, myFinalizerName) {
-			pod.ObjectMeta.Finalizers = append(pod.ObjectMeta.Finalizers, myFinalizerName)
-			if err := r.mgr.GetKubeManager().GetClient().Update(ctx, pod); err != nil {
-				log.WithEvent(pod, "UpdateError").Errorf(ctx, "Failed to update pod finalizer '%s/%s' (%v): %s", pod.Namespace, pod.Name, pod.ResourceVersion, err)
-				return reconcile.Result{}, nil
-			}
-			fmt.Println("Adding finalizer to", pod)
-			log.WithEvent(pod, "Info").Infof(ctx, "Updated pod finalizer '%s/%s' (%v)", pod.Namespace, pod.Name, pod.ResourceVersion)
-
-		}
-	} else {
-		// The object is being deleted
-		if containsString(pod.ObjectMeta.Finalizers, myFinalizerName) {
-			// our finalizer is present, so lets handle any external dependency
-			if err := r.ensureLogsAreStreamed(pod); err != nil {
-				// if fail to delete the external dependency here, return with error
-				// so that it can be retried
-				return reconcile.Result{}, nil
-			}
-			fmt.Println("Removing finalizer from", pod)
-
-			// remove our finalizer from the list and update it.
-			pod.ObjectMeta.Finalizers = removeString(pod.ObjectMeta.Finalizers, myFinalizerName)
-			if err := r.mgr.GetKubeManager().GetClient().Update(ctx, pod); err != nil {
-				log.WithEvent(pod, "UpdateError").Errorf(ctx, "Failed to update pod finalizer '%s/%s' (%v): %s", pod.Namespace, pod.Name, pod.ResourceVersion, err)
-				return reconcile.Result{}, nil
-			}
-			//		if err := r.dropLoggingFromPod(pod); err != nil {
-			//		log.WithEvent(pod, "UpdateError").Errorf(ctx, "Failed to update remove pod from logging processes '%s/%s' (%v): %s", pod.Namespace, pod.Name, pod.ResourceVersion, err)
-			//		return reconcile.Result{}, nil
-			//	}
-			log.WithEvent(pod, "Info").Infof(ctx, "Removed pod finalizer '%s/%s' (%v)", pod.Namespace, pod.Name, pod.ResourceVersion)
-		}
-
-		r.pw.Containers.EnsurePodStatus(pod)
-		// Stop reconciliation as the item is being deleted
-		return reconcile.Result{}, nil
+	if err := r.mgr.GetKubeManager().GetClient().Update(ctx, pod); err != nil {
+		log.WithEvent(pod, "UpdateError").Errorf(ctx, "Failed to update pod gracefulStart '%s/%s' (%v): %s", pod.Namespace, pod.Name, pod.ResourceVersion, err)
+		return reconcile.Result{Requeue: true}, nil
 	}
+	fmt.Println("Adding gracefulstart to", pod)
+	log.WithEvent(pod, "Info").Infof(ctx, "Updated pod gracefulStart '%s/%s' (%v)", pod.Namespace, pod.Name, pod.ResourceVersion)
 
 	return reconcile.Result{}, nil
 }
@@ -156,45 +136,4 @@ func (r *logReconciler) Register(m eirinix.Manager) error {
 	r.pw.Containers.Context = r.mgr.GetContext()
 	r.pw.Containers.LoggregatorOptions = r.pw.Config.GetLoggregatorOptions()
 	return nil
-}
-
-func (r *logReconciler) ensureLogsAreStreamed(pod *corev1.Pod) error {
-	podContainers := ExtractContainersFromPod(pod)
-	for _, c := range podContainers {
-		if _, ok := r.pw.Containers.GetContainer(c.UID); !ok {
-			fmt.Println("Log not streamed yet, not removing the finalizer from", c)
-			return errors.New("Logs not streamed yet")
-		}
-	}
-	return nil
-}
-
-func (r *logReconciler) dropLoggingFromPod(pod *corev1.Pod) error {
-	podContainers := ExtractContainersFromPod(pod)
-	for _, c := range podContainers {
-		if err := r.pw.Containers.RemoveContainer(c.UID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Helper functions to check and remove string from a slice of strings.
-func containsString(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(slice []string, s string) (result []string) {
-	for _, item := range slice {
-		if item == s {
-			continue
-		}
-		result = append(result, item)
-	}
-	return
 }

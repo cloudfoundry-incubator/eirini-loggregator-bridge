@@ -37,29 +37,22 @@ type Container struct {
 	LoggregatorOptions config.LoggregatorOptions
 	Loggregator        *Loggregator
 	AppMeta            *LoggregatorAppMeta
-
-	stopChan chan interface{}
 }
 
 type ContainerList struct {
 	Containers         map[string]*Container
 	KubeConfig         *rest.Config
 	LoggregatorOptions config.LoggregatorOptions
-	Context            context.Context
 	Tails              sync.WaitGroup
-	mux                sync.Mutex
+	Context            context.Context
 }
 
 func (cl *ContainerList) GetContainer(uid string) (*Container, bool) {
-	cl.mux.Lock()
-	defer cl.mux.Unlock()
 	c, ok := cl.Containers[uid]
 	return c, ok
 }
 
 func (cl *ContainerList) AddContainer(c *Container) {
-	cl.mux.Lock()
-	defer cl.mux.Unlock()
 	cl.Containers[c.UID] = c
 	c.Read(cl.Context, cl.LoggregatorOptions, cl.KubeConfig, &cl.Tails)
 }
@@ -68,8 +61,6 @@ func (cl *ContainerList) RemoveContainer(uid string) error {
 	LogDebug("Removing container: ", uid)
 	_, ok := cl.GetContainer(uid)
 	if ok {
-		cl.mux.Lock()
-		defer cl.mux.Unlock()
 		delete(cl.Containers, uid)
 	}
 	return nil
@@ -94,7 +85,7 @@ func (c *Container) Read(ctx context.Context, LoggregatorOptions config.Loggrega
 		if err != nil {
 			LogError(err.Error())
 		}
-		c.Loggregator = NewLoggregator(ctx, c.AppMeta, kubeClient, KubeConfig, LoggregatorOptions)
+		c.Loggregator = NewLoggregator(ctx, c.AppMeta, kubeClient, LoggregatorOptions)
 		if err = c.Loggregator.SetupLoggregatorClient(); err != nil {
 			LogError("Error: ", err.Error())
 			return
@@ -103,11 +94,6 @@ func (c *Container) Read(ctx context.Context, LoggregatorOptions config.Loggrega
 		if err != nil {
 			LogError("Error: ", err.Error())
 		}
-		// TODO: ?
-		//	err := cl.RemoveContainer(c.UID)
-		//	if err != nil {
-		//		return err
-		//	}
 	}(c, wg)
 }
 
@@ -164,13 +150,13 @@ func (cl *ContainerList) cleanup(podUID string, existingPodContainers map[string
 // or removed from the container list. It does that but checking the state of
 // of the container.
 func (cl *ContainerList) UpdateContainer(c *Container) error {
-	if c.State != nil && (c.State.Running != nil || c.State.Terminated != nil) {
+	if c.State != nil && c.State.Running != nil {
 		cl.EnsureContainer(c)
 	} else {
-		//err := cl.RemoveContainer(c.UID)
-		//if err != nil {
-		//	return err
-		//}
+		err := cl.RemoveContainer(c.UID)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -236,7 +222,7 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 		cl.UpdateContainer(c)
 	}
 
-	//cl.cleanup(string(pod.UID), podContainers)
+	cl.cleanup(string(pod.UID), podContainers)
 
 	return nil
 }
@@ -244,7 +230,7 @@ func (cl *ContainerList) EnsurePodStatus(pod *corev1.Pod) error {
 func NewPodWatcher(config config.ConfigType) *PodWatcher {
 	return &PodWatcher{
 		Config:     config,
-		Containers: ContainerList{Containers: map[string]*Container{}, mux: sync.Mutex{}},
+		Containers: ContainerList{Containers: map[string]*Container{}},
 	}
 }
 
@@ -269,6 +255,7 @@ func (pw *PodWatcher) EnsureLogStream(ctx context.Context, manager eirinix.Manag
 	if err != nil {
 		return err
 	}
+	pw.Containers.Context = ctx
 
 	// Get current RV
 	lw := cache.NewListWatchFromClient(client.RESTClient(), "pods", pw.Config.Namespace, fields.Everything())
@@ -323,7 +310,6 @@ func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 		return
 	}
 	pw.Containers.KubeConfig = config
-	pw.Containers.Context = manager.GetContext()
 	pw.Containers.LoggregatorOptions = pw.Config.GetLoggregatorOptions()
 	pw.Containers.EnsurePodStatus(pod)
 }

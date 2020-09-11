@@ -30,10 +30,12 @@ var rootCmd = &cobra.Command{
 		viper.BindPFlag("operator-service-name", cmd.Flags().Lookup("operator-service-name"))
 		viper.BindPFlag("operator-webhook-namespace", cmd.Flags().Lookup("operator-webhook-namespace"))
 		viper.BindPFlag("register", cmd.Flags().Lookup("register"))
+		viper.BindPFlag("graceful-start-time", cmd.Flags().Lookup("graceful-start-time"))
 
 		viper.BindEnv("operator-webhook-host", "OPERATOR_WEBHOOK_HOST")
 		viper.BindEnv("operator-webhook-port", "OPERATOR_WEBHOOK_PORT")
 		viper.BindEnv("operator-service-name", "OPERATOR_SERVICE_NAME")
+		viper.BindEnv("graceful-start-time", "GRACEFUL_START_TIME")
 		viper.BindEnv("operator-webhook-namespace", "OPERATOR_WEBHOOK_NAMESPACE")
 		viper.BindEnv("register", "EIRINI_EXTENSION_REGISTER")
 	},
@@ -44,6 +46,7 @@ var rootCmd = &cobra.Command{
 		serviceName := viper.GetString("operator-service-name")
 		webhookNamespace := viper.GetString("operator-webhook-namespace")
 		register := viper.GetBool("register")
+		gracefulStartTime := viper.GetString("graceful-start-time")
 
 		LogDebug("Namespace: ", config.Namespace)
 		LogDebug("Loggregator-endpoint: ", config.LoggregatorEndpoint)
@@ -95,9 +98,10 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		reconciler := podwatcher.NewLogReconciler(pw)
-		x.AddExtension(reconciler)
-		//	x.AddExtension(pw)
+		//	reconciler := podwatcher.NewLogReconciler(pw, gracefulStartTime)
+		//	x.AddExtension(reconciler)
+		x.AddExtension(podwatcher.NewGracefulStartTime(gracefulStartTime))
+		x.AddExtension(pw)
 
 		if err = x.Start(); err != nil {
 			LogError(err.Error())
@@ -122,6 +126,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig file path. This is optional, in cluster config will be used if not set")
 	rootCmd.PersistentFlags().StringP("operator-webhook-host", "w", "", "Hostname/IP under which the webhook server can be reached from the cluster")
 	rootCmd.PersistentFlags().StringP("operator-webhook-port", "p", "2999", "Port the webhook server listens on")
+	rootCmd.PersistentFlags().StringP("graceful-start-time", "g", "10", "Graceful start time for eirini pods")
 	rootCmd.PersistentFlags().StringP("operator-service-name", "s", "", "Service name where the webhook runs on (Optional, only needed inside kube)")
 	rootCmd.PersistentFlags().StringP("operator-webhook-namespace", "t", "", "The namespace the services lives in (Optional, only needed inside kube)")
 	rootCmd.PersistentFlags().BoolP("register", "r", true, "Register the extension")
@@ -142,6 +147,7 @@ func initConfig() {
 	viper.BindEnv("loggregator-endpoint", "LOGGREGATOR_ENDPOINT")
 	viper.BindEnv("loggregator-ca-path", "LOGGREGATOR_CA_PATH")
 	viper.BindEnv("loggregator-cert-path", "LOGGREGATOR_CERT_PATH")
+	viper.BindEnv("graceful-start-time", "GRACEFUL_START_TIME")
 
 	if cfgFile != "" {
 		yamlFile, err := ioutil.ReadFile(cfgFile)
