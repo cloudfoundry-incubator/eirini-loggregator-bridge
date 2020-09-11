@@ -1,9 +1,7 @@
 module github.com/SUSE/eirini-loggregator-bridge
 
 require (
-	code.cloudfoundry.org/go-diodes v0.0.0-20180905200951-72629b5276e3 // indirect
-	code.cloudfoundry.org/go-loggregator v7.4.0+incompatible
-	code.cloudfoundry.org/rfc5424 v0.0.0-20180905210152-236a6d29298a // indirect
+	code.cloudfoundry.org/go-loggregator/v8 v8.0.3
 	github.com/SUSE/eirinix v0.2.1-0.20200719200104-81b184602339
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0

@@ -2,15 +2,16 @@ package podwatcher
 
 import (
 	"bufio"
-	"code.cloudfoundry.org/go-loggregator"
-	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	"github.com/SUSE/eirini-loggregator-bridge/config"
-	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	"io"
-	"k8s.io/client-go/kubernetes"
 	"strconv"
 	"strings"
 	"time"
+
+	"code.cloudfoundry.org/go-loggregator/v8"
+	"code.cloudfoundry.org/go-loggregator/v8/rpc/loggregator_v2"
+	"github.com/SUSE/eirini-loggregator-bridge/config"
+	. "github.com/SUSE/eirini-loggregator-bridge/logger"
+	"k8s.io/client-go/kubernetes"
 )
 
 type LoggregatorAppMeta struct {
