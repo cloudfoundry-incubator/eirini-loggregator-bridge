@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=opensuse/leap
 
-FROM golang:1.12 as build
+FROM golang:1.14 as build
 ARG USER="SUSE CFCIBot"
 ARG EMAIL=ci-ci-bot@suse.de
 ARG DEBUG_TOOLS=false
@@ -12,6 +12,7 @@ ARG GO111MODULE="on"
 ENV GO111MODULE $GO111MODULE
 WORKDIR /go/src/github.com/SUSE/eirini-loggregator-bridge
 
+RUN apt-get update && apt-get install -y bzr
 # Cache go modules if possible
 ADD go.mod go.sum /go/src/github.com/SUSE/eirini-loggregator-bridge/
 RUN if [ "${GO111MODULE}" = "on" ] ; then go mod download ; fi
