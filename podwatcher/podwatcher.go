@@ -160,18 +160,18 @@ func (cl *ContainerList) UpdateContainer(c *Container) error {
 }
 
 func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
+	result := map[string]*Container{}
+
 	sourceType, ok := pod.GetLabels()[eirinix.LabelSourceType]
 	if ok && sourceType == "APP" {
 		sourceType = "APP/PROC/WEB"
 	}
 
-	result := map[string]*Container{}
-
 	// If there is no guid, someone deployed a pod in the Eirini namespace
 	// and we are not filtering by Labels (yet) or we get a Pod which is not
 	// created by Eirini.
 	// TODO: Consider filtering in Eirinix (watchers can accept filtered pods)
-	guid, ok := pod.GetLabels()[eirinix.LabelGUID]
+	guid, ok := pod.GetLabels()[eirinix.LabelAppGUID]
 	if !ok {
 		return result // empty list
 	}
@@ -189,9 +189,11 @@ func ExtractContainersFromPod(pod *corev1.Pod) map[string]*Container {
 				AppMeta: &LoggregatorAppMeta{
 					SourceID:   guid,
 					SourceType: sourceType,
-					PodName:    pod.Name,
-					Namespace:  pod.Namespace,
-					Container:  c.Name,
+					// since Eirini 1.8.0 - previously staging pods were named after the app guid, but that's not the case anymore
+					// annotate in the podname in the tags the guid of the app to keep compatibility and with such, ensure staging logs get streamed.
+					PodName:   guid,
+					Namespace: pod.Namespace,
+					Container: c.Name,
 					// TODO: Is this correct?
 					// https://github.com/gdankov/loggregator-ci/blob/eirini/docker-images/fluentd/plugins/loggregator.rb#L54
 					Cluster: pod.GetClusterName(),
