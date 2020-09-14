@@ -3,40 +3,79 @@ package podwatcher
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"runtime"
 
 	eirinix "code.cloudfoundry.org/eirinix"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+// https://github.com/cloudfoundry-incubator/eirini-staging/tree/master/image
+const (
+	defaultStagingExecutorEntrypoint   = "/packs/executor"
+	defaultStagingDownloaderEntrypoint = "/packs/downloader"
+	defaultStagingUploaderEntrypoint   = "/packs/uploader"
+	defaultRuntimeEntrypoint           = "/lifecycle/launch"
+	defaultFailGracePeriod             = "5"
+	defaultSuccessGracePeriod          = "5"
+)
+
+// GraceOptions lets customize the graceful periods and
+// the entrypoint of the images which are mutated to inject
+// the grace period logic
+type GraceOptions struct {
+	FailGracePeriod, SuccessGracePeriod string
+
+	StagingDownloaderEntrypoint string
+	StagingExecutorEntrypoint   string
+	StagingUploaderEntrypoint   string
+	RuntimeEntrypoint           string
+}
+
 // Extension changes pod definitions
 type Extension struct {
-	Logger            *zap.SugaredLogger
-	gracefulStartTime string
+	Logger  *zap.SugaredLogger
+	Options GraceOptions
 }
 
-// NewGracefulStartTime returns the podwatcher extension
-func NewGracefulStartTime(gracefulStartTime string) eirinix.Extension {
-	return &Extension{gracefulStartTime: gracefulStartTime}
+// NewgracePeriodInjector returns the podwatcher extension which injects a grace Period on Eirini generated pods
+func NewgracePeriodInjector(opts *GraceOptions) *Extension {
+	if len(opts.StagingExecutorEntrypoint) == 0 {
+		opts.StagingExecutorEntrypoint = defaultStagingExecutorEntrypoint
+	}
+
+	if len(opts.StagingDownloaderEntrypoint) == 0 {
+		opts.StagingDownloaderEntrypoint = defaultStagingDownloaderEntrypoint
+	}
+
+	if len(opts.StagingUploaderEntrypoint) == 0 {
+		opts.StagingUploaderEntrypoint = defaultStagingUploaderEntrypoint
+	}
+
+	if len(opts.RuntimeEntrypoint) == 0 {
+		opts.RuntimeEntrypoint = defaultRuntimeEntrypoint
+	}
+
+	if len(opts.FailGracePeriod) == 0 {
+		opts.FailGracePeriod = defaultFailGracePeriod
+	}
+
+	if len(opts.SuccessGracePeriod) == 0 {
+		opts.SuccessGracePeriod = defaultSuccessGracePeriod
+	}
+
+	return &Extension{Options: *opts}
 }
 
-// Handle manages volume claims for ExtendedStatefulSet pods
+// Handle injects gracefulPeriod in opi containers:
+// In case an application is too fast to fail, we might miss logs as Kubernetes will terminate the container
+// before the watcher had occasion to attach to stream any logs.
+// - Finalizers let the pod terminates, not giving any chance to get logs from terminated container.
+// - PostStop/PreStart hooks doesn't guarantee execution in case of containers terminated by failures (e.g. an invalid app was pushed in Eirini), if causing crashloopbackoff
+//   hooks aren't executed correctly.
 func (ext *Extension) Handle(ctx context.Context, eiriniManager eirinix.Manager, pod *corev1.Pod, req admission.Request) admission.Response {
-	// Injects PreStart hook for gracefulStarts:
-	// In case an application is too fast to fail, we might miss logs as Kubernetes will terminate the container
-	// before the watcher had occasion to attach to stream any logs.
-	// - Finalizers let the pod terminates, not giving any chance to get logs from terminated container.
-	// - PostStop hooks doesn't guarantee execution in case of containers terminated by failures (e.g. an invalid app was pushed in Eirini)
-	// - With the PreStart instead, we give chance to the watcher to hook to the container, without modifying the standard execution flow of the app
-	gracefulStart := &v1.Lifecycle{PostStart: &v1.Handler{Exec: &v1.ExecAction{Command: []string{
-		"/bin/sh",
-		"-c", "sleep " + ext.gracefulStartTime,
-	}}}}
 
 	if pod == nil {
 		return admission.Errored(http.StatusBadRequest, errors.New("No pod could be decoded from the request"))
@@ -48,21 +87,26 @@ func (ext *Extension) Handle(ctx context.Context, eiriniManager eirinix.Manager,
 	ext.Logger = log
 	podCopy := pod.DeepCopy()
 	log.Debugf("Handling webhook request for POD: %s (%s)", podCopy.Name, podCopy.Namespace)
-	// Init containers does not have poststart
-	//	for i, _ := range podCopy.Spec.InitContainers {
-	//	c := &podCopy.Spec.InitContainers[i]
-	//	if c.Lifecycle == nil {
-	//	c.Lifecycle = gracefulStart
-	//		}
-	//}
-	for i, _ := range podCopy.Spec.Containers {
-		c := &podCopy.Spec.Containers[i]
 
-		//	if c.Lifecycle == nil {
-		c.Lifecycle = gracefulStart
-		//	}
+	for i := range podCopy.Spec.InitContainers {
+		c := &podCopy.Spec.InitContainers[i]
+		switch c.Name {
+		case "opi-task-downloader":
+			c.Command = []string{"/bin/sh", "-c", "( " + ext.Options.StagingDownloaderEntrypoint + " && sleep " + ext.Options.SuccessGracePeriod + " ) || sleep " + ext.Options.FailGracePeriod + ""}
+		case "opi-task-executor":
+			c.Command = []string{"/bin/sh", "-c", "( " + ext.Options.StagingExecutorEntrypoint + " && sleep " + ext.Options.SuccessGracePeriod + " ) || sleep " + ext.Options.FailGracePeriod + ""}
+		}
 	}
-	fmt.Println(podCopy)
+
+	for i := range podCopy.Spec.Containers {
+		c := &podCopy.Spec.Containers[i]
+		switch c.Name {
+		case "opi":
+			c.Command = []string{"dumb-init", "--", "/bin/sh", "-c", "(  " + ext.Options.RuntimeEntrypoint + " && sleep " + ext.Options.SuccessGracePeriod + " ) || sleep " + ext.Options.FailGracePeriod}
+		case "opi-task-uploader":
+			c.Command = []string{"/bin/sh", "-c", "( " + ext.Options.StagingUploaderEntrypoint + " && sleep " + ext.Options.SuccessGracePeriod + " ) || sleep " + ext.Options.FailGracePeriod}
+		}
+	}
 
 	return eiriniManager.PatchFromPod(req, podCopy)
 }

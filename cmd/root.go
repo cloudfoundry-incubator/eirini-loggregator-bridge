@@ -98,9 +98,10 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		//	reconciler := podwatcher.NewLogReconciler(pw, gracefulStartTime)
-		//	x.AddExtension(reconciler)
-		x.AddExtension(podwatcher.NewGracefulStartTime(gracefulStartTime))
+		x.AddExtension(podwatcher.NewgracePeriodInjector(&podwatcher.GraceOptions{
+			FailGracePeriod:    gracefulStartTime,
+			SuccessGracePeriod: gracefulStartTime,
+		}))
 		x.AddExtension(pw)
 
 		if err = x.Start(); err != nil {

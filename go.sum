@@ -41,6 +41,8 @@ github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdko
 github.com/SUSE/eirini-loggregator-bridge v0.0.0-20200911090928-2c55fd6aae40 h1:kQ++Mc2j/ZBzRURiskoYvXZTs9MCFXcLW7MofDWlgVc=
 github.com/SUSE/eirini-loggregator-bridge v0.0.0-20200911090928-2c55fd6aae40/go.mod h1:L14QiEHWE0Y5/2cy+1gPqjFxgZkp1YDk9n2Tid9WIF4=
 github.com/SUSE/eirinix v0.2.1-0.20200719200104-81b184602339/go.mod h1:Xu+jP2zFZxjMWYzFHv7Ib6K4M9aAGjXdxghYHp22N0Y=
+github.com/SUSE/eirinix v0.3.0 h1:R+sn9KvfoJkBlrBQUyTMgtxzT3y+0UhuJWoT8uHQtig=
+github.com/SUSE/eirinix v0.3.0/go.mod h1:4C9RYxBlO+F7Hn78kg0NScpAcWKigWZMQUo4rHRv0zE=
 github.com/agnivade/levenshtein v1.0.1/go.mod h1:CURSv5d9Uaml+FovSIICkLbAUZ9S4RqaHDIsdSBg7lM=
 github.com/akavel/rsrc v0.8.0/go.mod h1:uLoCtb9J+EyAqh+26kdrTgmzRBFPGOolLWKpdxkKq+c=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
