@@ -40,8 +40,8 @@ type Extension struct {
 	Options GraceOptions
 }
 
-// NewgracePeriodInjector returns the podwatcher extension which injects a grace Period on Eirini generated pods
-func NewgracePeriodInjector(opts *GraceOptions) *Extension {
+// NewGracePeriodInjector returns the podwatcher extension which injects a grace Period on Eirini generated pods
+func NewGracePeriodInjector(opts *GraceOptions) *Extension {
 	if len(opts.StagingExecutorEntrypoint) == 0 {
 		opts.StagingExecutorEntrypoint = defaultStagingExecutorEntrypoint
 	}
