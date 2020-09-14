@@ -30,14 +30,24 @@ var rootCmd = &cobra.Command{
 		viper.BindPFlag("operator-service-name", cmd.Flags().Lookup("operator-service-name"))
 		viper.BindPFlag("operator-webhook-namespace", cmd.Flags().Lookup("operator-webhook-namespace"))
 		viper.BindPFlag("register", cmd.Flags().Lookup("register"))
-		viper.BindPFlag("graceful-start-time", cmd.Flags().Lookup("graceful-start-time"))
+		viper.BindPFlag("graceful-fail-time", cmd.Flags().Lookup("graceful-fail-time"))
+		viper.BindPFlag("graceful-success-time", cmd.Flags().Lookup("graceful-success-time"))
+		viper.BindPFlag("downloader-entrypoint", cmd.Flags().Lookup("downloader-entrypoint"))
+		viper.BindPFlag("executor-entrypoint", cmd.Flags().Lookup("executor-entrypoint"))
+		viper.BindPFlag("uploader-entrypoint", cmd.Flags().Lookup("uploader-entrypoint"))
+		viper.BindPFlag("opi-entrypoint", cmd.Flags().Lookup("opi-entrypoint"))
 
 		viper.BindEnv("operator-webhook-host", "OPERATOR_WEBHOOK_HOST")
 		viper.BindEnv("operator-webhook-port", "OPERATOR_WEBHOOK_PORT")
 		viper.BindEnv("operator-service-name", "OPERATOR_SERVICE_NAME")
-		viper.BindEnv("graceful-start-time", "GRACEFUL_START_TIME")
 		viper.BindEnv("operator-webhook-namespace", "OPERATOR_WEBHOOK_NAMESPACE")
 		viper.BindEnv("register", "EIRINI_EXTENSION_REGISTER")
+		viper.BindEnv("graceful-fail-time", "GRACEFUL_FAIL_TIME")
+		viper.BindEnv("graceful-success-time", "GRACEFUL_SUCCESS_TIME")
+		viper.BindEnv("downloader-entrypoint", "DOWNLOADER_ENTRYPOINT")
+		viper.BindEnv("executor-entrypoint", "EXECUTOR_ENTRYPOINT")
+		viper.BindEnv("uploader-entrypoint", "UPLOADER_ENTRYPOINT")
+		viper.BindEnv("opi-entrypoint", "OPI_ENTRYPOINT")
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
@@ -98,7 +108,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		x.AddExtension(podwatcher.NewgracePeriodInjector(&podwatcher.GraceOptions{
+		x.AddExtension(podwatcher.NewGracePeriodInjector(&podwatcher.GraceOptions{
 			FailGracePeriod:    gracefulStartTime,
 			SuccessGracePeriod: gracefulStartTime,
 		}))
@@ -127,10 +137,16 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig file path. This is optional, in cluster config will be used if not set")
 	rootCmd.PersistentFlags().StringP("operator-webhook-host", "w", "", "Hostname/IP under which the webhook server can be reached from the cluster")
 	rootCmd.PersistentFlags().StringP("operator-webhook-port", "p", "2999", "Port the webhook server listens on")
-	rootCmd.PersistentFlags().StringP("graceful-start-time", "g", "10", "Graceful start time for eirini pods")
 	rootCmd.PersistentFlags().StringP("operator-service-name", "s", "", "Service name where the webhook runs on (Optional, only needed inside kube)")
 	rootCmd.PersistentFlags().StringP("operator-webhook-namespace", "t", "", "The namespace the services lives in (Optional, only needed inside kube)")
 	rootCmd.PersistentFlags().BoolP("register", "r", true, "Register the extension")
+
+	rootCmd.PersistentFlags().StringP("graceful-fail-time", "f", "10", "Graceful fail time for eirini pods")
+	rootCmd.PersistentFlags().StringP("graceful-success-time", "s", "10", "Graceful success time for eirini pods")
+	rootCmd.PersistentFlags().StringP("downloader-entrypoint", "d", "", "Eirini staging downloader entrypoint")
+	rootCmd.PersistentFlags().StringP("executor-entrypoint", "e", "", "Eirini staging executor entrypoint")
+	rootCmd.PersistentFlags().StringP("uploader-entrypoint", "u", "", "Eirini staging uploader entrypoint")
+	rootCmd.PersistentFlags().StringP("opi-entrypoint", "o", "", "Eirini opi entrypoint")
 }
 
 func initConfig() {
@@ -148,7 +164,12 @@ func initConfig() {
 	viper.BindEnv("loggregator-endpoint", "LOGGREGATOR_ENDPOINT")
 	viper.BindEnv("loggregator-ca-path", "LOGGREGATOR_CA_PATH")
 	viper.BindEnv("loggregator-cert-path", "LOGGREGATOR_CERT_PATH")
-	viper.BindEnv("graceful-start-time", "GRACEFUL_START_TIME")
+	viper.BindEnv("graceful-fail-time", "GRACEFUL_FAIL_TIME")
+	viper.BindEnv("graceful-success-time", "GRACEFUL_SUCCESS_TIME")
+	viper.BindEnv("downloader-entrypoint", "DOWNLOADER_ENTRYPOINT")
+	viper.BindEnv("executor-entrypoint", "EXECUTOR_ENTRYPOINT")
+	viper.BindEnv("uploader-entrypoint", "UPLOADER_ENTRYPOINT")
+	viper.BindEnv("opi-entrypoint", "OPI_ENTRYPOINT")
 
 	if cfgFile != "" {
 		yamlFile, err := ioutil.ReadFile(cfgFile)
