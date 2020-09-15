@@ -14,12 +14,12 @@ import (
 
 // https://github.com/cloudfoundry-incubator/eirini-staging/tree/master/image
 const (
-	defaultStagingExecutorEntrypoint   = "/packs/executor"
-	defaultStagingDownloaderEntrypoint = "/packs/downloader"
-	defaultStagingUploaderEntrypoint   = "/packs/uploader"
-	defaultRuntimeEntrypoint           = "/lifecycle/launch"
-	defaultFailGracePeriod             = "5"
-	defaultSuccessGracePeriod          = "5"
+	DefaultStagingExecutorEntrypoint   = "/packs/executor"
+	DefaultStagingDownloaderEntrypoint = "/packs/downloader"
+	DefaultStagingUploaderEntrypoint   = "/packs/uploader"
+	DefaultRuntimeEntrypoint           = "/lifecycle/launch"
+	DefaultFailGracePeriod             = "5"
+	DefaultSuccessGracePeriod          = "5"
 )
 
 // GraceOptions lets customize the graceful periods and
@@ -43,27 +43,27 @@ type Extension struct {
 // NewGracePeriodInjector returns the podwatcher extension which injects a grace Period on Eirini generated pods
 func NewGracePeriodInjector(opts *GraceOptions) *Extension {
 	if len(opts.StagingExecutorEntrypoint) == 0 {
-		opts.StagingExecutorEntrypoint = defaultStagingExecutorEntrypoint
+		opts.StagingExecutorEntrypoint = DefaultStagingExecutorEntrypoint
 	}
 
 	if len(opts.StagingDownloaderEntrypoint) == 0 {
-		opts.StagingDownloaderEntrypoint = defaultStagingDownloaderEntrypoint
+		opts.StagingDownloaderEntrypoint = DefaultStagingDownloaderEntrypoint
 	}
 
 	if len(opts.StagingUploaderEntrypoint) == 0 {
-		opts.StagingUploaderEntrypoint = defaultStagingUploaderEntrypoint
+		opts.StagingUploaderEntrypoint = DefaultStagingUploaderEntrypoint
 	}
 
 	if len(opts.RuntimeEntrypoint) == 0 {
-		opts.RuntimeEntrypoint = defaultRuntimeEntrypoint
+		opts.RuntimeEntrypoint = DefaultRuntimeEntrypoint
 	}
 
 	if len(opts.FailGracePeriod) == 0 {
-		opts.FailGracePeriod = defaultFailGracePeriod
+		opts.FailGracePeriod = DefaultFailGracePeriod
 	}
 
 	if len(opts.SuccessGracePeriod) == 0 {
-		opts.SuccessGracePeriod = defaultSuccessGracePeriod
+		opts.SuccessGracePeriod = DefaultSuccessGracePeriod
 	}
 
 	return &Extension{Options: *opts}

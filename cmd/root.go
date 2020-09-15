@@ -68,10 +68,10 @@ var rootCmd = &cobra.Command{
 			LogDebug("required flag 'operator-webhook-host' not set (env variable: OPERATOR_WEBHOOK_HOST)")
 		}
 
-		RegisterWebhooks := true
+		registerWebhooks := true
 		if !register {
 			LogDebug("The extension will start without registering")
-			RegisterWebhooks = false
+			registerWebhooks = false
 		}
 		err = config.Validate()
 		if err != nil {
@@ -92,7 +92,7 @@ var rootCmd = &cobra.Command{
 			Port:             webhookPort,
 			ServiceName:      serviceName,
 			WebhookNamespace: webhookNamespace,
-			RegisterWebHook:  &RegisterWebhooks,
+			RegisterWebHook:  &registerWebhooks,
 		})
 
 		pw := podwatcher.NewPodWatcher(config)
@@ -102,7 +102,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		x.AddExtension(podwatcher.NewGracePeriodInjector(&podwatcher.GraceOptions{
+		if err := x.AddExtension(podwatcher.NewGracePeriodInjector(&podwatcher.GraceOptions{
 			FailGracePeriod:    gracefulFailTime,
 			SuccessGracePeriod: gracefulSuccessTime,
 
@@ -110,8 +110,14 @@ var rootCmd = &cobra.Command{
 			StagingExecutorEntrypoint:   executorEntrypoint,
 			StagingUploaderEntrypoint:   uploaderEntrypoint,
 			RuntimeEntrypoint:           opiEntrypoint,
-		}))
-		x.AddExtension(pw)
+		})); err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
+		if err := x.AddExtension(pw); err != nil {
+			LogError(err.Error())
+			os.Exit(1)
+		}
 
 		if err = x.Start(); err != nil {
 			LogError(err.Error())
@@ -140,12 +146,12 @@ func init() {
 	rootCmd.PersistentFlags().StringP("operator-webhook-namespace", "t", "", "The namespace the services lives in (Optional, only needed inside kube)")
 	rootCmd.PersistentFlags().BoolP("register", "r", true, "Register the extension")
 
-	rootCmd.PersistentFlags().StringP("graceful-fail-time", "f", "", "Graceful fail time for eirini pods")
-	rootCmd.PersistentFlags().StringP("graceful-success-time", "g", "", "Graceful success time for eirini pods")
-	rootCmd.PersistentFlags().StringP("downloader-entrypoint", "d", "", "Eirini staging downloader entrypoint")
-	rootCmd.PersistentFlags().StringP("executor-entrypoint", "e", "", "Eirini staging executor entrypoint")
-	rootCmd.PersistentFlags().StringP("uploader-entrypoint", "u", "", "Eirini staging uploader entrypoint")
-	rootCmd.PersistentFlags().StringP("opi-entrypoint", "o", "", "Eirini opi entrypoint")
+	rootCmd.PersistentFlags().StringP("graceful-fail-time", "f", podwatcher.DefaultFailGracePeriod, "Graceful fail time for eirini pods")
+	rootCmd.PersistentFlags().StringP("graceful-success-time", "g", podwatcher.DefaultSuccessGracePeriod, "Graceful success time for eirini pods")
+	rootCmd.PersistentFlags().StringP("downloader-entrypoint", "d", podwatcher.DefaultStagingDownloaderEntrypoint, "Eirini staging downloader entrypoint")
+	rootCmd.PersistentFlags().StringP("executor-entrypoint", "e", podwatcher.DefaultStagingExecutorEntrypoint, "Eirini staging executor entrypoint")
+	rootCmd.PersistentFlags().StringP("uploader-entrypoint", "u", podwatcher.DefaultStagingUploaderEntrypoint, "Eirini staging uploader entrypoint")
+	rootCmd.PersistentFlags().StringP("opi-entrypoint", "o", podwatcher.DefaultRuntimeEntrypoint, "Eirini opi entrypoint")
 }
 
 func initConfig() {

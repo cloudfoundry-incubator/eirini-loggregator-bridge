@@ -3,6 +3,7 @@ package podwatcher_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	. "code.cloudfoundry.org/eirini-loggregator-bridge/podwatcher"
 	eirinixcatalog "code.cloudfoundry.org/eirinix/testing"
@@ -14,20 +15,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-func decodePatches(resp admission.Response) string {
-	var r string
-	for _, patch := range resp.Patches {
-		r += patch.Json()
-	}
-	return r
-}
-
 func jsonifyPatches(resp admission.Response) []string {
 	var r []string
 	for _, patch := range resp.Patches {
 		r = append(r, patch.Json())
 	}
 	return r
+}
+
+func decodePatches(resp admission.Response) string {
+	return strings.Join(jsonifyPatches(resp), "")
 }
 
 const (
@@ -122,7 +119,7 @@ var _ = Describe("Eirini extension", func() {
 				}
 			})
 			It("Does not inject a grace period", func() {
-				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(Equal(""))
+				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(BeEmpty())
 			})
 		})
 
@@ -156,7 +153,7 @@ var _ = Describe("Eirini extension", func() {
 				}
 			})
 			It("Does not inject a grace period if the initcontainer doesn't have the correct name", func() {
-				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(Equal(""))
+				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(BeEmpty())
 			})
 		})
 
@@ -200,7 +197,7 @@ var _ = Describe("Eirini extension", func() {
 			})
 
 			It("Doesn't return any patch", func() {
-				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(Equal(""))
+				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(BeEmpty())
 			})
 		})
 
