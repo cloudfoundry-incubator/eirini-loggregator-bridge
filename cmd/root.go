@@ -65,7 +65,7 @@ var rootCmd = &cobra.Command{
 
 		LogDebug("Starting Loggregator")
 		if webhookHost == "" {
-			LogDebug("required flag 'operator-webhook-host' not set (env variable: OPERATOR_WEBHOOK_HOST)")
+			LogWarn("required flag 'operator-webhook-host' not set (env variable: OPERATOR_WEBHOOK_HOST)")
 		}
 
 		registerWebhooks := true
