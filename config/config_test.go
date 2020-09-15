@@ -1,7 +1,7 @@
 package config_test
 
 import (
-	configpkg "github.com/SUSE/eirini-loggregator-bridge/config"
+	configpkg "code.cloudfoundry.org/eirini-loggregator-bridge/config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

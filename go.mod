@@ -1,17 +1,18 @@
-module github.com/SUSE/eirini-loggregator-bridge
+module code.cloudfoundry.org/eirini-loggregator-bridge
 
 require (
+	code.cloudfoundry.org/eirinix v0.3.1-0.20200908072226-2c03042398ea
 	code.cloudfoundry.org/go-loggregator/v8 v8.0.3
-	github.com/SUSE/eirinix v0.2.1-0.20200719200104-81b184602339
-	github.com/onsi/ginkgo v1.12.0
-	github.com/onsi/gomega v1.9.0
+	github.com/mitchellh/mapstructure v1.2.2 // indirect
+	github.com/onsi/ginkgo v1.12.1
+	github.com/onsi/gomega v1.10.1
 	github.com/spf13/cobra v0.0.7
 	github.com/spf13/viper v1.6.3
-	k8s.io/api v0.0.0-20200404061942-2a93acf49b83
-	k8s.io/apimachinery v0.0.0-20200410010401-7378bafd8ae2
-	k8s.io/client-go v0.0.0-20200330143601-07e69aceacd6
+	go.uber.org/zap v1.15.0
+	k8s.io/api v0.18.6
+	k8s.io/apimachinery v0.18.6
+	k8s.io/client-go v0.18.6
+	sigs.k8s.io/controller-runtime v0.6.2
 )
-
-replace code.cloudfoundry.org/cf-operator => code.cloudfoundry.org/quarks-operator v1.0.1-0.20200413083459-fb39a29ad746
 
 go 1.13

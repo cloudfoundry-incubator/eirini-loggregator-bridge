@@ -2,15 +2,16 @@ package podwatcher
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"strconv"
 	"strings"
 	"time"
 
+	"code.cloudfoundry.org/eirini-loggregator-bridge/config"
+	. "code.cloudfoundry.org/eirini-loggregator-bridge/logger"
 	"code.cloudfoundry.org/go-loggregator/v8"
 	"code.cloudfoundry.org/go-loggregator/v8/rpc/loggregator_v2"
-	"github.com/SUSE/eirini-loggregator-bridge/config"
-	. "github.com/SUSE/eirini-loggregator-bridge/logger"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -24,6 +25,7 @@ type Loggregator struct {
 	ConnectionOptions config.LoggregatorOptions
 	KubeClient        *kubernetes.Clientset
 	LoggregatorClient *loggregator.IngressClient
+	Context           context.Context
 }
 
 type LoggregatorLogger struct{}
@@ -35,8 +37,8 @@ func (LoggregatorLogger) Panicf(message string, args ...interface{}) {
 	panic(message)
 }
 
-func NewLoggregator(m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, connectionOptions config.LoggregatorOptions) *Loggregator {
-	return &Loggregator{Meta: m, KubeClient: kubeClient, ConnectionOptions: connectionOptions}
+func NewLoggregator(ctx context.Context, m *LoggregatorAppMeta, kubeClient *kubernetes.Clientset, connectionOptions config.LoggregatorOptions) *Loggregator {
+	return &Loggregator{Meta: m, KubeClient: kubeClient, ConnectionOptions: connectionOptions, Context: ctx}
 }
 
 func (l *Loggregator) Envelope(message []byte) *loggregator_v2.Envelope {
@@ -106,7 +108,7 @@ func (l *Loggregator) Tail(namespace, pod, container string) error {
 		Param("container", container).
 		Param("previous", strconv.FormatBool(false)).
 		Param("timestamps", strconv.FormatBool(false))
-	stream, err := req.Stream()
+	stream, err := req.Stream(l.Context)
 	if err != nil {
 		return err
 	}

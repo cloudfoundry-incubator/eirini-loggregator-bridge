@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/SUSE/eirini-loggregator-bridge/cmd"
+	"code.cloudfoundry.org/eirini-loggregator-bridge/cmd"
 )
 
 func main() {

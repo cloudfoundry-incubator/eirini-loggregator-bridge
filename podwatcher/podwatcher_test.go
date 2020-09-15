@@ -1,9 +1,9 @@
 package podwatcher_test
 
 import (
-	config "github.com/SUSE/eirini-loggregator-bridge/config"
-	. "github.com/SUSE/eirini-loggregator-bridge/podwatcher"
-	eirinix "github.com/SUSE/eirinix"
+	config "code.cloudfoundry.org/eirini-loggregator-bridge/config"
+	. "code.cloudfoundry.org/eirini-loggregator-bridge/podwatcher"
+	eirinix "code.cloudfoundry.org/eirinix"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
