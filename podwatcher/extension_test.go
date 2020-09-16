@@ -230,5 +230,48 @@ var _ = Describe("Eirini extension", func() {
 				Expect(len(patches)).To(Equal(3))
 			})
 		})
+
+		Context("when handling a Eirini runtime app", func() {
+			BeforeEach(func() {
+				pod = &corev1.Pod{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "opi",
+							},
+						},
+					},
+				}
+			})
+
+			It("doesn't inject a grace period if GraceImageContainsString doesn't match the pod image name", func() {
+				gracefulInjector = NewGracePeriodInjector(&GraceOptions{
+					GraceImageContainsString: "foo",
+				})
+				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(BeEmpty())
+			})
+		})
+
+		Context("when handling a Eirini runtime app", func() {
+			BeforeEach(func() {
+				pod = &corev1.Pod{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Image: "foofa",
+								Name:  "opi",
+							},
+						},
+					},
+				}
+			})
+
+			It("Injects a grace period as GraceImageContainsString is matching", func() {
+				gracefulInjector = NewGracePeriodInjector(&GraceOptions{
+					GraceImageContainsString: "foo",
+				})
+				Expect(decodePatches(gracefulInjector.Handle(context.TODO(), eiriniManager, pod, request))).To(Equal(addOpiPatch))
+			})
+		})
 	})
 })
