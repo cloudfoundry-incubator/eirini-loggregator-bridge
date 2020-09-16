@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"runtime"
+	"strings"
 
 	eirinix "code.cloudfoundry.org/eirinix"
 	"go.uber.org/zap"
@@ -32,6 +33,8 @@ type GraceOptions struct {
 	StagingExecutorEntrypoint   string
 	StagingUploaderEntrypoint   string
 	RuntimeEntrypoint           string
+
+	GraceImageContainsString string
 }
 
 // Extension changes pod definitions
@@ -87,7 +90,6 @@ func (ext *Extension) Handle(ctx context.Context, eiriniManager eirinix.Manager,
 	ext.Logger = log
 	podCopy := pod.DeepCopy()
 	log.Debugf("Handling webhook request for POD: %s (%s)", podCopy.Name, podCopy.Namespace)
-
 	for i := range podCopy.Spec.InitContainers {
 		c := &podCopy.Spec.InitContainers[i]
 		switch c.Name {
@@ -102,6 +104,10 @@ func (ext *Extension) Handle(ctx context.Context, eiriniManager eirinix.Manager,
 		c := &podCopy.Spec.Containers[i]
 		switch c.Name {
 		case "opi":
+			if len(ext.Options.GraceImageContainsString) > 0 &&
+				!strings.Contains(c.Image, ext.Options.GraceImageContainsString) {
+				continue
+			}
 			c.Command = []string{"dumb-init", "--", "/bin/sh", "-c", "(  " + ext.Options.RuntimeEntrypoint + " && sleep " + ext.Options.SuccessGracePeriod + " ) || sleep " + ext.Options.FailGracePeriod}
 		case "opi-task-uploader":
 			c.Command = []string{"/bin/sh", "-c", "( " + ext.Options.StagingUploaderEntrypoint + " && sleep " + ext.Options.SuccessGracePeriod + " ) || sleep " + ext.Options.FailGracePeriod}

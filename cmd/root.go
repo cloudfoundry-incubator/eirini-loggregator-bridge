@@ -36,7 +36,7 @@ var rootCmd = &cobra.Command{
 		viper.BindPFlag("executor-entrypoint", cmd.Flags().Lookup("executor-entrypoint"))
 		viper.BindPFlag("uploader-entrypoint", cmd.Flags().Lookup("uploader-entrypoint"))
 		viper.BindPFlag("opi-entrypoint", cmd.Flags().Lookup("opi-entrypoint"))
-
+		viper.BindPFlag("opi-image-contains", cmd.Flags().Lookup("opi-image-contains"))
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
@@ -51,6 +51,7 @@ var rootCmd = &cobra.Command{
 		executorEntrypoint := viper.GetString("executor-entrypoint")
 		uploaderEntrypoint := viper.GetString("uploader-entrypoint")
 		opiEntrypoint := viper.GetString("opi-entrypoint")
+		opiImageString := viper.GetString("opi-image-contains")
 
 		LogDebug("Namespace: ", config.Namespace)
 		LogDebug("Loggregator-endpoint: ", config.LoggregatorEndpoint)
@@ -110,6 +111,7 @@ var rootCmd = &cobra.Command{
 			StagingExecutorEntrypoint:   executorEntrypoint,
 			StagingUploaderEntrypoint:   uploaderEntrypoint,
 			RuntimeEntrypoint:           opiEntrypoint,
+			GraceImageContainsString:    opiImageString,
 		})); err != nil {
 			LogError(err.Error())
 			os.Exit(1)
@@ -152,6 +154,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("executor-entrypoint", "e", podwatcher.DefaultStagingExecutorEntrypoint, "Eirini staging executor entrypoint")
 	rootCmd.PersistentFlags().StringP("uploader-entrypoint", "u", podwatcher.DefaultStagingUploaderEntrypoint, "Eirini staging uploader entrypoint")
 	rootCmd.PersistentFlags().StringP("opi-entrypoint", "o", podwatcher.DefaultRuntimeEntrypoint, "Eirini opi entrypoint")
+	rootCmd.PersistentFlags().StringP("opi-image-contains", "", "", "If defined injects graceperiod only if the opi image is containing the given string")
 }
 
 func initConfig() {
@@ -174,6 +177,7 @@ func initConfig() {
 	viper.SetDefault("EXECUTOR_ENTRYPOINT", "")
 	viper.SetDefault("UPLOADER_ENTRYPOINT", "")
 	viper.SetDefault("OPI_ENTRYPOINT", "")
+	viper.SetDefault("OPI_IMAGE_CONTAINS", "")
 
 	viper.BindEnv("namespace", "NAMESPACE")
 	viper.BindEnv("loggregator-key-path", "LOGGREGATOR_KEY_PATH")
@@ -191,6 +195,7 @@ func initConfig() {
 	viper.BindEnv("executor-entrypoint", "EXECUTOR_ENTRYPOINT")
 	viper.BindEnv("uploader-entrypoint", "UPLOADER_ENTRYPOINT")
 	viper.BindEnv("opi-entrypoint", "OPI_ENTRYPOINT")
+	viper.BindEnv("opi-image-contains", "OPI_IMAGE_CONTAINS")
 
 	if cfgFile != "" {
 		yamlFile, err := ioutil.ReadFile(cfgFile)
