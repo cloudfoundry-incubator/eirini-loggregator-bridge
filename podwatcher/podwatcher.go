@@ -291,17 +291,22 @@ func (pw *PodWatcher) EnsureLogStream(ctx context.Context, manager eirinix.Manag
 
 func (pw *PodWatcher) Handle(manager eirinix.Manager, e watch.Event) {
 	LogDebug("Received event: ", e)
+
+	// TODO: Handle errors ( maybe kill the whole application )
+	// because it is going to run in goroutines, and we can't
+	// just return gracefully and panicking the whole
+
+	// Errors at this stage cause the loggregator to stop responding
 	if e.Object == nil {
-		// Closed because of error
-		// TODO: Handle errors ( maybe kill the whole application )
-		// because it is going to run in goroutines, and we can't
-		// just return gracefully and panicking the whole
+		LogError("Received nil object in watcher channel")
+		manager.GetLogger().Panic("Shutting down...")
 		return
 	}
 
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
 		LogError("Received non-pod object in watcher channel")
+		manager.GetLogger().Panic("Shutting down...")
 		return
 	}
 	config, err := manager.GetKubeConnection()
